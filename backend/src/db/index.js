@@ -189,6 +189,96 @@ async function init() {
       status TEXT DEFAULT 'na_cekanju', notes TEXT,
       checked_at TEXT DEFAULT (datetime('now'))
     )`)
+  // ── Quality Management System tables ─────────────────────────────────────
+  sqlDb.run(`CREATE TABLE IF NOT EXISTS quality_protocols (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      version TEXT DEFAULT '1.0',
+      project_name TEXT,
+      drawing_number TEXT,
+      material TEXT,
+      status TEXT DEFAULT 'aktivan',
+      description TEXT,
+      created_by INTEGER,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    )`)
+  sqlDb.run(`CREATE TABLE IF NOT EXISTS quality_measures (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      protocol_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      nominal REAL,
+      tolerance_min REAL,
+      tolerance_max REAL,
+      unit TEXT DEFAULT 'mm',
+      measurement_method TEXT,
+      instrument_type TEXT,
+      sort_order INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`)
+  sqlDb.run(`CREATE TABLE IF NOT EXISTS quality_inspections (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      work_order_ref TEXT,
+      part_name TEXT,
+      drawing_number TEXT,
+      quantity INTEGER DEFAULT 1,
+      quantity_measured INTEGER DEFAULT 0,
+      type TEXT DEFAULT 'završna',
+      protocol_id INTEGER,
+      inspector_id INTEGER,
+      machine_id INTEGER,
+      result TEXT DEFAULT 'na_čekanju',
+      verdict_notes TEXT,
+      notes TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      completed_at TEXT
+    )`)
+  sqlDb.run(`CREATE TABLE IF NOT EXISTS quality_measure_results (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      inspection_id INTEGER NOT NULL,
+      measure_id INTEGER,
+      measure_name TEXT NOT NULL,
+      nominal REAL,
+      tolerance_min REAL,
+      tolerance_max REAL,
+      unit TEXT DEFAULT 'mm',
+      measured_value REAL,
+      deviation REAL,
+      status TEXT DEFAULT 'ok',
+      sample_number INTEGER DEFAULT 1,
+      notes TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`)
+  sqlDb.run(`CREATE TABLE IF NOT EXISTS quality_instruments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      type TEXT,
+      serial_number TEXT,
+      manufacturer TEXT,
+      storage_location TEXT,
+      status TEXT DEFAULT 'aktivan',
+      last_calibration TEXT,
+      next_calibration TEXT,
+      calibration_interval_days INTEGER DEFAULT 365,
+      accuracy TEXT,
+      range_min REAL,
+      range_max REAL,
+      unit TEXT DEFAULT 'mm',
+      notes TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`)
+  sqlDb.run(`CREATE TABLE IF NOT EXISTS quality_nok_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      inspection_id INTEGER,
+      work_order_ref TEXT,
+      part_name TEXT,
+      measure_name TEXT,
+      nominal REAL,
+      measured_value REAL,
+      deviation REAL,
+      nok_type TEXT,
+      logged_at TEXT DEFAULT (datetime('now'))
+    )`)
   sqlDb.run(`CREATE TABLE IF NOT EXISTS warehouse_items (
       id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT, name TEXT NOT NULL,
       category TEXT, current_qty REAL DEFAULT 0, min_qty REAL DEFAULT 0,
@@ -715,6 +805,95 @@ async function init() {
         })
       }
     }
+
+
+    // ── Quality Management seed ──────────────────────────────────────────────
+    const _qmIds = sqlDb.exec('SELECT id,name FROM machines LIMIT 3')
+    const _qwIds = sqlDb.exec("SELECT id,work_order_id,part_name,drawing_number,quantity FROM work_orders LIMIT 3")
+    const _quIds = sqlDb.exec("SELECT id FROM users LIMIT 1")
+    const _qInspectorId = _quIds[0]?.values[0]?.[0] || 1
+
+    // Instruments
+    const _instrData = [
+      ['Pomično mjerilo 0-150mm', 'pomično', 'PM-001-2024', 'Mitutoyo', 'Polica A3', 'aktivan',
+       new Date(Date.now()-90*864e5).toISOString().slice(0,10), new Date(Date.now()+275*864e5).toISOString().slice(0,10), 365, '±0.02mm', 0, 150, 'mm'],
+      ['Mikrometar 0-25mm', 'mikrometar', 'MK-015-2023', 'Mitutoyo', 'Polica A3', 'aktivan',
+       new Date(Date.now()-180*864e5).toISOString().slice(0,10), new Date(Date.now()+20*864e5).toISOString().slice(0,10), 365, '±0.001mm', 0, 25, 'mm'],
+      ['Mjerač hrapavosti Ra', 'hrapavost', 'HR-008-2024', 'Surftest', 'Polica B1', 'aktivan',
+       new Date(Date.now()-45*864e5).toISOString().slice(0,10), new Date(Date.now()+320*864e5).toISOString().slice(0,10), 365, '±0.01μm', 0, 100, 'μm'],
+      ['Tvrdomjer HRC', 'tvrdomjer', 'TV-002-2022', 'Wilson', 'Polica C2', 'na_kalibraciji',
+       new Date(Date.now()-400*864e5).toISOString().slice(0,10), new Date(Date.now()-35*864e5).toISOString().slice(0,10), 365, '±0.5 HRC', 20, 70, 'HRC'],
+    ]
+    _instrData.forEach(([name,type,sn,manuf,loc,status,lastCal,nextCal,intv,acc,rmin,rmax,unit]) => {
+      sqlDb.run('INSERT INTO quality_instruments (name,type,serial_number,manufacturer,storage_location,status,last_calibration,next_calibration,calibration_interval_days,accuracy,range_min,range_max,unit) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
+        [name,type,sn,manuf,loc,status,lastCal,nextCal,intv,acc,rmin,rmax,unit])
+    })
+
+    // Protocols + measures
+    const _proto1 = sqlDb.exec("INSERT INTO quality_protocols (name,version,project_name,drawing_number,material,status,created_by) VALUES ('Nosač osi X — kontrolni plan','1.2','Projekt A','DWG-100016','Nehrđajući čelik 1.4404','aktivan',1)")
+    const _p1id = sqlDb.exec('SELECT last_insert_rowid()')[0].values[0][0]
+    const _proto2 = sqlDb.exec("INSERT INTO quality_protocols (name,version,project_name,drawing_number,material,status,created_by) VALUES ('Kućište pumpe — kontrolni plan','2.0','Projekt B','DWG-200048','Aluminij EN AW-2024','aktivan',1)")
+    const _p2id = sqlDb.exec('SELECT last_insert_rowid()')[0].values[0][0]
+
+    const _measures1 = [
+      [_p1id, 'Promjer Ø42h7', 42.0, -0.025, 0.0, 'mm', 'pomično mjerilo', 1],
+      [_p1id, 'Duljina 120±0.1', 120.0, -0.1, 0.1, 'mm', 'pomično mjerilo', 2],
+      [_p1id, 'Hrapavost Ra ≤ 1.6', 1.6, 0, 1.6, 'μm', 'mjerač hrapavosti', 3],
+      [_p1id, 'Paralelnost 0.02', 0, 0, 0.02, 'mm', 'mjerač', 4],
+      [_p1id, 'Tvrdoća 58-62 HRC', 60, -2, 2, 'HRC', 'tvrdomjer', 5],
+    ]
+    _measures1.forEach(([pid,name,nom,tmin,tmax,unit,method,sort]) => {
+      sqlDb.run('INSERT INTO quality_measures (protocol_id,name,nominal,tolerance_min,tolerance_max,unit,measurement_method,sort_order) VALUES (?,?,?,?,?,?,?,?)',
+        [pid,name,nom,tmin,tmax,unit,method,sort])
+    })
+    const _measures2 = [
+      [_p2id, 'Vanjski Ø 85±0.05', 85.0, -0.05, 0.05, 'mm', 'mikrometar', 1],
+      [_p2id, 'Dubina džepa 12+0.1/-0', 12.0, 0, 0.1, 'mm', 'pomično mjerilo', 2],
+      [_p2id, 'Hrapavost unutarnja Ra ≤ 3.2', 3.2, 0, 3.2, 'μm', 'mjerač hrapavosti', 3],
+    ]
+    _measures2.forEach(([pid,name,nom,tmin,tmax,unit,method,sort]) => {
+      sqlDb.run('INSERT INTO quality_measures (protocol_id,name,nominal,tolerance_min,tolerance_max,unit,measurement_method,sort_order) VALUES (?,?,?,?,?,?,?,?)',
+        [pid,name,nom,tmin,tmax,unit,method,sort])
+    })
+
+    // Inspections with results
+    const _insp1 = sqlDb.exec(`INSERT INTO quality_inspections (work_order_ref,part_name,drawing_number,quantity,quantity_measured,type,protocol_id,inspector_id,result,completed_at) VALUES ('WO-2025-001','Nosač osi X','DWG-100016',20,5,'završna',${_p1id},${_qInspectorId},'odobreno','${new Date(Date.now()-2*864e5).toISOString()}')`)
+    const _i1id = sqlDb.exec('SELECT last_insert_rowid()')[0].values[0][0]
+    const _insp2 = sqlDb.exec(`INSERT INTO quality_inspections (work_order_ref,part_name,drawing_number,quantity,quantity_measured,type,protocol_id,inspector_id,result,verdict_notes) VALUES ('WO-2025-002','Kućište pumpe','DWG-200048',5,0,'završna',${_p2id},${_qInspectorId},'na_čekanju',NULL)`)
+    const _i2id = sqlDb.exec('SELECT last_insert_rowid()')[0].values[0][0]
+    const _insp3 = sqlDb.exec(`INSERT INTO quality_inspections (work_order_ref,part_name,drawing_number,quantity,quantity_measured,type,protocol_id,inspector_id,result,verdict_notes,completed_at) VALUES ('WO-2025-003','Osovina B14','DWG-300012',50,10,'međufazna',${_p1id},${_qInspectorId},'odbijeno','Promjer van tolerancije na 3 komada — vraćeno na doradu','${new Date(Date.now()-5*864e5).toISOString()}')`)
+    const _i3id = sqlDb.exec('SELECT last_insert_rowid()')[0].values[0][0]
+
+    // Measure results for inspection 1 (all OK)
+    const _res1 = [
+      [_i1id, 'Promjer Ø42h7', 42.0, -0.025, 0.0, 'mm', 41.988, 'ok', 1],
+      [_i1id, 'Duljina 120±0.1', 120.0, -0.1, 0.1, 'mm', 120.042, 'ok', 1],
+      [_i1id, 'Hrapavost Ra ≤ 1.6', 1.6, 0, 1.6, 'μm', 1.28, 'ok', 1],
+      [_i1id, 'Paralelnost 0.02', 0, 0, 0.02, 'mm', 0.011, 'ok', 1],
+      [_i1id, 'Tvrdoća 58-62 HRC', 60, -2, 2, 'HRC', 59.5, 'ok', 1],
+    ]
+    _res1.forEach(([iid,name,nom,tmin,tmax,unit,val,status,sn]) => {
+      const dev = val - nom
+      sqlDb.run('INSERT INTO quality_measure_results (inspection_id,measure_name,nominal,tolerance_min,tolerance_max,unit,measured_value,deviation,status,sample_number) VALUES (?,?,?,?,?,?,?,?,?,?)',
+        [iid,name,nom,tmin,tmax,unit,val,Math.round(dev*1000)/1000,status,sn])
+    })
+
+    // Measure results for inspection 3 (some NOK)
+    const _res3 = [
+      [_i3id, 'Promjer Ø42h7', 42.0, -0.025, 0.0, 'mm', 42.031, 'nok', 1],
+      [_i3id, 'Duljina 120±0.1', 120.0, -0.1, 0.1, 'mm', 120.088, 'ok', 1],
+      [_i3id, 'Promjer Ø42h7', 42.0, -0.025, 0.0, 'mm', 42.028, 'nok', 2],
+      [_i3id, 'Paralelnost 0.02', 0, 0, 0.02, 'mm', 0.031, 'nok', 1],
+    ]
+    _res3.forEach(([iid,name,nom,tmin,tmax,unit,val,status,sn]) => {
+      const dev = val - nom
+      sqlDb.run('INSERT INTO quality_measure_results (inspection_id,measure_name,nominal,tolerance_min,tolerance_max,unit,measured_value,deviation,status,sample_number) VALUES (?,?,?,?,?,?,?,?,?,?)',
+        [iid,name,nom,tmin,tmax,unit,val,Math.round(dev*1000)/1000,status,sn])
+      if (status === 'nok') {
+        sqlDb.run('INSERT INTO quality_nok_log (inspection_id,work_order_ref,part_name,measure_name,nominal,measured_value,deviation,nok_type) VALUES (?,?,?,?,?,?,?,?)',
+          [iid,'WO-2025-003','Osovina B14',name,nom,val,Math.round(dev*1000)/1000,'over_tolerance'])
+      }
+    })
 
 
     // ── Machine Telemetry seed ─────────────────────────────────────────────
