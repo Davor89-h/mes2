@@ -716,6 +716,41 @@ async function init() {
       }
     }
 
+
+    // ── Machine Telemetry seed ─────────────────────────────────────────────
+    const _telMachIds = sqlDb.exec('SELECT id FROM machines LIMIT 3')
+    if (_telMachIds[0]?.values?.length) {
+      const _telBase = [
+        { temp:42, spindle:8500, feed:1200, vibr:0.8, power:12.5, status:'running' },
+        { temp:28, spindle:0,    feed:0,    vibr:0.1, power:1.2,  status:'idle'    },
+        { temp:55, spindle:6000, feed:800,  vibr:1.2, power:18.0, status:'running' },
+      ]
+      _telMachIds[0].values.forEach(([mid], idx) => {
+        const base = _telBase[idx] || _telBase[0]
+        for (let i = 19; i >= 0; i--) {
+          const ts = new Date(Date.now() - i * 90000).toISOString()
+          const j = (v, p) => Math.round((v * (1 + (Math.random()-0.5)*p)) * 10) / 10
+          sqlDb.run(`INSERT INTO machine_telemetry (machine_id,temperature,spindle_speed,feed_rate,vibration,power_kw,status,recorded_at) VALUES (?,?,?,?,?,?,?,?)`,
+            [mid, j(base.temp,0.08), j(base.spindle,0.05)||0, j(base.feed,0.1)||0, j(base.vibr,0.2), j(base.power,0.06), base.status, ts])
+        }
+      })
+    }
+
+    // ── Maintenance orders seed ──────────────────────────────────────────
+    const _mIds = sqlDb.exec('SELECT id FROM machines LIMIT 3')
+    if (_mIds[0]?.values?.length && _mIds[0].values.length >= 1) {
+      const _mVals = _mIds[0].values
+      const _maintData = [
+        [_mVals[0][0],'preventive','normal','open','Preventivni servis Q2','Zamjena filtera ulja i kontrola remena'],
+        [_mVals[1]?.[0]||_mVals[0][0],'corrective','high','open','Zamjena ležaja vretena','Povećan šum pri visokim okretajima'],
+        [_mVals[2]?.[0]||_mVals[0][0],'preventive','normal','open','Kalibracija osi X/Y/Z','Godišnja kalibracija linearnih osi'],
+      ]
+      _maintData.forEach(([mid,type,prio,status,title,desc]) => {
+        sqlDb.run(`INSERT INTO maintenance_orders (machine_id,type,priority,status,title,description) VALUES (?,?,?,?,?,?)`,
+          [mid,type,prio,status,title,desc])
+      })
+    }
+
     saveToFile()
     console.log('✅ Demo data seeded — admin/admin123, operator/operator123')
   } else {

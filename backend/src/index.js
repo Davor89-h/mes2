@@ -39,7 +39,31 @@ db.init().then(() => {
   app.use('/api/production',  require('./routes/production'))
   app.use('/api/kontroling', require('./routes/kontroling'))
   app.use('/api/tasks', require('./routes/tasks'))
+  app.use('/api/digital-twin', require('./routes/digital_twin'))
   // ── END MES v2 ROUTES ──────────────────────────────
+
+  // ── Live telemetry simulator — new readings every 30s ─────────────────────
+  const _db = require('./db')
+  const _telBase = [
+    { temp:42, spindle:8500, feed:1200, vibr:0.8, power:12.5 },
+    { temp:28, spindle:0,    feed:0,    vibr:0.1, power:1.2  },
+    { temp:55, spindle:6000, feed:800,  vibr:1.2, power:18.0 },
+  ]
+  setInterval(() => {
+    try {
+      const _machines = _db.all('SELECT id, status FROM machines')
+      const _j = (v, p) => Math.round((v * (1 + (Math.random()-0.5)*p)) * 10) / 10
+      const _ts = new Date().toISOString()
+      _machines.forEach((m, idx) => {
+        const _b = _telBase[idx] || _telBase[0]
+        const _on = m.status === 'running'
+        _db.run('INSERT INTO machine_telemetry (machine_id,temperature,spindle_speed,feed_rate,vibration,power_kw,status,recorded_at) VALUES (?,?,?,?,?,?,?,?)',
+          [m.id, _j(_on?_b.temp:23,0.05), _on?_j(_b.spindle,0.04):0, _on?_j(_b.feed,0.08):0,
+           _j(_on?_b.vibr:0.04,0.15), _j(_on?_b.power:0.7,0.05), m.status, _ts])
+      })
+    } catch(_e) {}
+  }, 30000)
+  // ────────────────────────────────────────────────────────────────────────────
 
   // Try multiple possible frontend dist paths
   const possiblePaths = [
