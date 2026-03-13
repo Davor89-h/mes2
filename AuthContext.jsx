@@ -1,25 +1,19 @@
-import i18n from 'i18next'
-import { initReactI18next } from 'react-i18next'
-import hr from './hr'
-import de from './de'
-import en from './en'
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
 
-const savedLang = localStorage.getItem('deer_lang') || 'hr'
-
-i18n.use(initReactI18next).init({
-  resources: {
-    hr: { translation: hr },
-    de: { translation: de },
-    en: { translation: en },
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    port: 5173,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      }
+    }
   },
-  lng: savedLang,
-  fallbackLng: 'hr',
-  interpolation: { escapeValue: false },
+  build: {
+    outDir: 'dist',
+    emptyOutDir: true,
+  }
 })
-
-export default i18n
-export const LANGUAGES = [
-  { code: 'hr', label: 'Hrvatski', flag: '🇭🇷' },
-  { code: 'de', label: 'Deutsch', flag: '🇩🇪' },
-  { code: 'en', label: 'English', flag: '🇬🇧' },
-]

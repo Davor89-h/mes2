@@ -1,328 +1,393 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { C, Loading } from '../components/UI'
-import { Cpu, Wifi, WifiOff, AlertTriangle, Activity, Thermometer, Zap, TrendingUp, RefreshCw } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { C, useToast } from '../components/UI'
+import api from '../utils/api'
+import { useAuth } from '../context/AuthContext'
+import { Users, Plus, X, Save, Edit2, Shield, Key, UserCheck, UserX, CheckCircle, Lock } from 'lucide-react'
 
-const WS_URL = `ws://${window.location.hostname}:5000/ws/machines`
-const STATUS_CONFIG = {
-  running: { color: '#4ADE80', label: 'RADI', dot: '#4ADE80' },
-  idle:    { color: C?.accent || '#60A5FA', label: 'STOJI', dot: C?.accent || '#60A5FA' },
-  alarm:   { color: '#F87171', label: 'ALARM', dot: '#F87171' },
-  offline: { color: '#6B7280', label: 'OFFLINE', dot: '#6B7280' },
+const S = {
+  card:  { background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20 },
+  input: { background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 12px', color: C.gray, fontSize: 13, outline: 'none', width: '100%', boxSizing: 'border-box' },
+  label: { fontSize: 11, color: C.muted, letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 4, display: 'block' },
+  btn:   (col=C.accent) => ({ background: col, border: 'none', borderRadius: 8, padding: '8px 16px', color: col===C.accent?'#1a2a28':C.gray, fontWeight: 600, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }),
+  ghost: { background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 14px', color: C.muted, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 },
+  th:    { padding: '10px 14px', fontSize: 10, color: C.muted, letterSpacing: 1.4, textTransform: 'uppercase', textAlign: 'left', borderBottom: `1px solid ${C.border}`, whiteSpace: 'nowrap' },
+  td:    { padding: '11px 14px', fontSize: 13, color: C.gray, borderBottom: `1px solid ${C.border}22`, verticalAlign: 'middle' },
 }
 
-// Colors
-const BG = '#0d1f1c'
-const SURFACE = '#142820'
-const SURFACE2 = '#1a3028'
-const SURFACE3 = '#1f3830'
-const BORDER = '#2a4038'
-const TEAL = '#51FFFF'
-const MUTED = '#5A8480'
-const MUTED2 = '#7A9A90'
-const GRAY = '#C8DDD9'
+const ROLE_COLORS = { admin: C.red, manager: C.orange, operator: C.teal, maintenance: C.blue, quality: C.green, warehouse: C.accent }
 
-function GaugeBar({ value, max = 100, color, label, unit = '%' }) {
-  const pct = Math.min(100, Math.max(0, (value / max) * 100))
-  const barColor = pct > 90 ? '#F87171' : pct > 75 ? '#FB923C' : color
-
+function RoleBadge({ name, label }) {
+  const color = ROLE_COLORS[name] || C.muted
   return (
-    <div style={{ marginBottom: 8 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-        <span style={{ fontSize: 10, color: MUTED, letterSpacing: 0.5 }}>{label}</span>
-        <span style={{ fontSize: 11, fontWeight: 700, color: barColor, fontFamily: 'monospace' }}>
-          {typeof value === 'number' ? value.toFixed(unit === '%' ? 0 : 1) : value}{unit}
-        </span>
-      </div>
-      <div style={{ height: 4, background: BORDER, borderRadius: 2, overflow: 'hidden' }}>
-        <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: 2, transition: 'width 0.6s ease, background 0.3s' }}/>
-      </div>
-    </div>
+    <span style={{ background: color+'22', color, border: `1px solid ${color}44`, borderRadius: 20, padding: '2px 8px', fontSize: 10, fontWeight: 700 }}>
+      {label || name}
+    </span>
   )
 }
 
-function MachineCard({ machine, selected, onClick }) {
-  const sc = STATUS_CONFIG[machine.status] || STATUS_CONFIG.offline
-  const hasAlerts = machine.alerts?.length > 0
+// ── User Modal ────────────────────────────────────────────────────────────────
+function UserModal({ user: editUser, roles, onClose, onSaved }) {
+  const isNew = !editUser?.id
+  const [form, setForm] = useState({
+    username: editUser?.username || '',
+    first_name: editUser?.first_name || '',
+    last_name: editUser?.last_name || '',
+    email: editUser?.email || '',
+    role: editUser?.role || 'operator',
+    active: editUser?.active !== undefined ? editUser.active : 1,
+    password: '',
+  })
+  const [selectedRoles, setSelectedRoles] = useState(editUser?.roles || [])
+  const [tab, setTab] = useState('info')
+  const [loading, setLoading] = useState(false)
+  const F = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
-  return (
-    <div onClick={onClick} style={{
-      background: selected ? `${TEAL}10` : SURFACE,
-      border: `1px solid ${hasAlerts ? '#F87171' : selected ? TEAL : BORDER}`,
-      borderRadius: 14, padding: '16px 18px', cursor: 'pointer',
-      transition: 'all .2s', position: 'relative', overflow: 'hidden',
-      animation: hasAlerts ? 'none' : undefined,
-    }}>
-      {/* Status bar */}
-      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: sc.color }}/>
-
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-        <div style={{ width: 8, height: 8, borderRadius: '50%', background: sc.color, boxShadow: `0 0 6px ${sc.color}` }}/>
-        <span style={{ fontSize: 13, fontWeight: 700, color: '#e8f0ee', flex: 1 }}>{machine.machine_name}</span>
-        <span style={{ fontSize: 9, padding: '2px 8px', borderRadius: 12, background: `${sc.color}20`, color: sc.color, border: `1px solid ${sc.color}40` }}>
-          {sc.label}
-        </span>
-        {hasAlerts && <AlertTriangle size={14} color="#F87171"/>}
-      </div>
-
-      {/* Key metrics */}
-      <GaugeBar value={machine.spindle_load} label="Spindle" unit="%" color={TEAL}/>
-      <GaugeBar value={machine.vibration} max={5} label="Vibracija" unit="g" color="#F5BC54"/>
-      <GaugeBar value={machine.temperature} max={80} label="Temp" unit="°C" color="#FB923C"/>
-
-      {/* Bottom row */}
-      <div style={{ display: 'flex', gap: 12, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${BORDER}` }}>
-        <div style={{ fontSize: 10, color: MUTED }}>
-          S: <span style={{ color: TEAL, fontFamily: 'monospace' }}>{machine.spindle_speed?.toFixed(0)} rpm</span>
-        </div>
-        <div style={{ fontSize: 10, color: MUTED }}>
-          F: <span style={{ color: TEAL, fontFamily: 'monospace' }}>{machine.feed_rate?.toFixed(0)}</span>
-        </div>
-        <div style={{ fontSize: 10, color: MUTED }}>
-          T: <span style={{ color: TEAL, fontFamily: 'monospace' }}>T{machine.tool_number?.toString().padStart(2,'0')}</span>
-        </div>
-        <div style={{ marginLeft: 'auto', fontSize: 10, color: MUTED }}>
-          {machine.part_count} kom
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function SparkLine({ data, color, height = 30 }) {
-  if (!data || data.length < 2) return null
-  const max = Math.max(...data, 0.01)
-  const min = Math.min(...data)
-  const range = max - min || 1
-  const w = 120, h = height
-  const pts = data.map((v, i) => `${(i / (data.length - 1)) * w},${h - ((v - min) / range) * (h - 4) - 2}`).join(' ')
-
-  return (
-    <svg width={w} height={h} style={{ display: 'block' }}>
-      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  )
-}
-
-export default function MachineTelemetryPage() {
-  const [machines, setMachines] = useState([])
-  const [selected, setSelected] = useState(null)
-  const [connected, setConnected] = useState(false)
-  const [lastUpdate, setLastUpdate] = useState(null)
-  const [alerts, setAlerts] = useState([])
-  const [history, setHistory] = useState({}) // machineId → [{spindle_load, ...}]
-  const wsRef = useRef(null)
-  const reconnectRef = useRef(null)
-
-  const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) return
-
+  const save = async () => {
+    setLoading(true)
     try {
-      const ws = new WebSocket(WS_URL)
-      wsRef.current = ws
-
-      ws.onopen = () => {
-        setConnected(true)
-        console.log('[WS] Connected')
-        if (reconnectRef.current) { clearTimeout(reconnectRef.current); reconnectRef.current = null }
+      let userId = editUser?.id
+      if (isNew) {
+        const r = await api.post('/users', form)
+        userId = r.data.id
+      } else {
+        await api.put(`/users/${editUser.id}`, form)
+        if (form.password) await api.patch(`/users/${editUser.id}/password`, { password: form.password })
       }
-
-      ws.onmessage = (event) => {
-        try {
-          const msg = JSON.parse(event.data)
-          setLastUpdate(new Date())
-
-          if (msg.type === 'batch' || msg.type === 'snapshot') {
-            const data = msg.data || []
-            setMachines(data)
-
-            // Update history
-            setHistory(prev => {
-              const updated = { ...prev }
-              data.forEach(m => {
-                const hist = updated[m.machine_id] || []
-                updated[m.machine_id] = [...hist.slice(-30), m.spindle_load]
-              })
-              return updated
-            })
+      // Sync roles
+      if (userId && !isNew) {
+        const currentRoles = editUser?.roles || []
+        for (const r of selectedRoles) {
+          if (!currentRoles.includes(r)) {
+            const role = roles.find(x => x.name === r)
+            if (role) await api.post(`/users/${userId}/roles`, { role_id: role.id }).catch(() => {})
           }
-
-          if (msg.type === 'alert') {
-            setAlerts(prev => {
-              const newAlerts = [{ ...msg.data, timestamp: msg.timestamp }, ...prev].slice(0, 20)
-              return newAlerts
-            })
+        }
+        for (const r of currentRoles) {
+          if (!selectedRoles.includes(r)) {
+            const role = roles.find(x => x.name === r)
+            if (role) await api.delete(`/users/${userId}/roles/${role.id}`).catch(() => {})
           }
-        } catch {}
+        }
       }
+      onSaved()
+      onClose()
+    } catch (e) { alert(e.response?.data?.error || e.message) }
+    setLoading(false)
+  }
 
-      ws.onclose = () => {
-        setConnected(false)
-        // Reconnect after 3s
-        reconnectRef.current = setTimeout(connect, 3000)
-      }
-
-      ws.onerror = () => {
-        ws.close()
-      }
-    } catch(e) {
-      setConnected(false)
-      reconnectRef.current = setTimeout(connect, 5000)
-    }
-  }, [])
-
-  useEffect(() => {
-    connect()
-    return () => {
-      if (wsRef.current) wsRef.current.close()
-      if (reconnectRef.current) clearTimeout(reconnectRef.current)
-    }
-  }, [connect])
-
-  const selectedMachine = selected ? machines.find(m => m.machine_id === selected) : null
-  const machineHistory = selected ? (history[selected] || []) : []
-
-  const runningCount = machines.filter(m => m.status === 'running').length
-  const alarmCount = machines.filter(m => m.status === 'alarm').length
-  const idleCount = machines.filter(m => m.status === 'idle').length
+  const toggleRole = (roleName) => {
+    setSelectedRoles(r => r.includes(roleName) ? r.filter(x => x !== roleName) : [...r, roleName])
+  }
 
   return (
-    <div style={{ fontFamily: "'Chakra Petch', sans-serif" }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
-        <div style={{ width: 48, height: 48, borderRadius: 14, background: `${TEAL}15`, border: `1px solid ${TEAL}30`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Activity size={24} color={TEAL}/>
-        </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 10, color: MUTED, letterSpacing: 2 }}>DEER MES v4 · REAL-TIME</div>
-          <div style={{ fontSize: 19, fontWeight: 700, color: '#e8f0ee', letterSpacing: 1.5 }}>MACHINE MONITORING</div>
-          <div style={{ fontSize: 11, color: MUTED2, display: 'flex', alignItems: 'center', gap: 8 }}>
-            {connected ? (
-              <><Wifi size={11} color="#4ADE80"/> <span style={{ color: '#4ADE80' }}>WebSocket aktivan</span></>
-            ) : (
-              <><WifiOff size={11} color="#F87171"/> <span style={{ color: '#F87171' }}>Spajanje...</span></>
-            )}
-            {lastUpdate && <span style={{ color: MUTED }}>· {lastUpdate.toLocaleTimeString('hr-HR')}</span>}
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
+      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, width: '100%', maxWidth: 560, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 22px', borderBottom: `1px solid ${C.border}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Users size={18} color={C.accent}/>
+            <span style={{ color: C.gray, fontWeight: 700 }}>{isNew ? 'Novi korisnik' : `Uredi: ${editUser.first_name} ${editUser.last_name}`}</span>
           </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted }}><X size={18}/></button>
         </div>
 
-        {/* Summary chips */}
-        <div style={{ display: 'flex', gap: 10 }}>
-          {[
-            ['RADI', runningCount, '#4ADE80'],
-            ['STOJI', idleCount, '#60A5FA'],
-            ['ALARM', alarmCount, '#F87171'],
-          ].map(([label, count, color]) => (
-            <div key={label} style={{ padding: '8px 14px', borderRadius: 10, background: `${color}12`, border: `1px solid ${color}33`, textAlign: 'center' }}>
-              <div style={{ fontSize: 20, fontWeight: 800, color }}>{count}</div>
-              <div style={{ fontSize: 9, color: MUTED, letterSpacing: 1 }}>{label}</div>
-            </div>
+        {/* Tabs */}
+        <div style={{ display: 'flex', gap: 4, padding: '12px 22px 0', borderBottom: `1px solid ${C.border}` }}>
+          {[{id:'info',label:'Informacije'},{id:'roles',label:'Uloge & Dozvole'},{id:'security',label:'Sigurnost'}].map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)} style={{
+              background: 'none', border: 'none', cursor: 'pointer', padding: '8px 14px',
+              color: tab === t.id ? C.accent : C.muted, fontSize: 12, fontWeight: tab === t.id ? 700 : 400,
+              borderBottom: `2px solid ${tab === t.id ? C.accent : 'transparent'}`, marginBottom: -1
+            }}>{t.label}</button>
           ))}
+        </div>
+
+        <div style={{ overflowY: 'auto', padding: '20px 22px', flex: 1, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {tab === 'info' && (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div><label style={S.label}>Ime</label><input value={form.first_name} onChange={e => F('first_name', e.target.value)} style={S.input}/></div>
+                <div><label style={S.label}>Prezime</label><input value={form.last_name} onChange={e => F('last_name', e.target.value)} style={S.input}/></div>
+              </div>
+              <div><label style={S.label}>Korisničko ime *</label><input value={form.username} onChange={e => F('username', e.target.value)} style={S.input} disabled={!isNew}/></div>
+              <div><label style={S.label}>Email</label><input type="email" value={form.email} onChange={e => F('email', e.target.value)} style={S.input}/></div>
+              <div>
+                <label style={S.label}>Osnovna uloga</label>
+                <select value={form.role} onChange={e => F('role', e.target.value)} style={S.input}>
+                  <option value="company_admin">Administrator sustava</option>
+                  <option value="operator">Operater</option>
+                  <option value="manager">Manager</option>
+                  <option value="technician">Tehničar</option>
+                  <option value="viewer">Preglednik</option>
+                </select>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div onClick={() => F('active', form.active ? 0 : 1)} style={{
+                  width: 40, height: 22, borderRadius: 11, background: form.active ? C.green : C.surface3,
+                  cursor: 'pointer', position: 'relative', transition: 'background .2s', border: `1px solid ${C.border}`
+                }}>
+                  <div style={{ position: 'absolute', top: 2, left: form.active ? 20 : 2, width: 16, height: 16, borderRadius: '50%', background: form.active ? '#1a2a28' : C.muted, transition: 'left .2s' }}/>
+                </div>
+                <span style={{ fontSize: 13, color: form.active ? C.green : C.muted }}>{form.active ? 'Aktivan korisnik' : 'Neaktivan korisnik'}</span>
+              </div>
+            </>
+          )}
+
+          {tab === 'roles' && (
+            <div>
+              <div style={{ marginBottom: 16, color: C.muted, fontSize: 12 }}>Odaberite RBAC uloge za korisnika. Svaka uloga nosi set dozvola.</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {roles.map(role => {
+                  const active = selectedRoles.includes(role.name)
+                  const color = ROLE_COLORS[role.name] || C.muted
+                  return (
+                    <div key={role.id} onClick={() => toggleRole(role.name)} style={{
+                      background: active ? color+'18' : C.surface2,
+                      border: `1px solid ${active ? color : C.border}`,
+                      borderRadius: 10, padding: '12px 16px', cursor: 'pointer', transition: 'all .2s'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <Shield size={14} color={active ? color : C.muted}/>
+                          <span style={{ color: active ? color : C.gray, fontWeight: 700, fontSize: 13 }}>{role.label}</span>
+                        </div>
+                        <div style={{ width: 18, height: 18, borderRadius: 4, border: `2px solid ${active ? color : C.border}`, background: active ? color : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          {active && <CheckCircle size={12} color="#1a2a28"/>}
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 11, color: C.muted }}>{role.description}</div>
+                      <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                        {role.permissions?.slice(0,6).map(p => (
+                          <span key={p.name} style={{ fontSize: 9, background: C.surface3, color: C.muted2, padding: '1px 6px', borderRadius: 4 }}>{p.name}</span>
+                        ))}
+                        {role.permissions?.length > 6 && <span style={{ fontSize: 9, color: C.muted }}>+{role.permissions.length-6} više</span>}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {tab === 'security' && (
+            <>
+              <div>
+                <label style={S.label}>{isNew ? 'Lozinka *' : 'Nova lozinka (ostavite prazno za bez promjene)'}</label>
+                <input type="password" value={form.password} onChange={e => F('password', e.target.value)} style={S.input} placeholder={isNew ? 'Min. 4 znaka' : '••••••••'}/>
+              </div>
+              {!isNew && (
+                <div style={{ background: C.surface2, borderRadius: 10, padding: 14 }}>
+                  <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>Informacije o računu</div>
+                  <div style={{ fontSize: 12, color: C.gray }}>Kreiran: <span style={{ color: C.muted }}>{editUser.created_at?.slice(0,10)}</span></div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', gap: 10, padding: '16px 22px', borderTop: `1px solid ${C.border}` }}>
+          <button onClick={save} disabled={loading} style={{ ...S.btn(), flex: 1, justifyContent: 'center', opacity: loading ? .6 : 1 }}>
+            <Save size={14}/>{loading ? 'Sprema...' : 'Spremi korisnika'}
+          </button>
+          <button onClick={onClose} style={S.ghost}><X size={14}/> Odustani</button>
         </div>
       </div>
+    </div>
+  )
+}
 
-      {/* Alerts ticker */}
-      {alerts.length > 0 && (
-        <div style={{ background: `#F8717115`, border: `1px solid #F8717133`, borderRadius: 10, padding: '10px 16px', marginBottom: 16, display: 'flex', gap: 10, alignItems: 'center', overflowX: 'auto' }}>
-          <AlertTriangle size={14} color="#F87171" style={{ flexShrink: 0 }}/>
-          <span style={{ fontSize: 11, color: '#F87171', fontWeight: 700, flexShrink: 0 }}>ALARMI:</span>
-          {alerts.slice(0, 3).map((a, i) => (
-            <span key={i} style={{ fontSize: 11, color: GRAY, flexShrink: 0 }}>
-              {a.alerts?.[0]?.message || JSON.stringify(a)}
-            </span>
-          ))}
+// ── Permissions viewer ────────────────────────────────────────────────────────
+function PermissionsModal({ userId, userName, onClose }) {
+  const [perms, setPerms] = useState([])
+  const [roles, setRoles] = useState([])
+  useEffect(() => {
+    api.get(`/users/${userId}`).then(r => {
+      setPerms(r.data.permissions || [])
+      setRoles(r.data.roles || [])
+    })
+  }, [userId])
+
+  const byModule = {}
+  perms.forEach(p => { if (!byModule[p.module]) byModule[p.module] = []; byModule[p.module].push(p) })
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: 16 }}>
+      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, width: '100%', maxWidth: 500, maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: `1px solid ${C.border}` }}>
+          <div>
+            <div style={{ color: C.gray, fontWeight: 700 }}>Dozvole: {userName}</div>
+            <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>Uloge: {roles.map(r => r.label).join(', ') || 'Nema'}</div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted }}><X size={18}/></button>
         </div>
-      )}
-
-      <div style={{ display: 'grid', gridTemplateColumns: selected ? '1fr 380px' : 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14, alignItems: 'start' }}>
-        {/* Machine cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
-          {machines.length === 0 ? (
-            <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: 60, color: MUTED }}>
-              {connected ? (
-                <><RefreshCw size={32} color={MUTED} style={{ marginBottom: 12 }}/><div>Čekanje na telemetriju...</div></>
-              ) : (
-                <><WifiOff size={32} color={MUTED} style={{ marginBottom: 12 }}/><div>Spajanje na WebSocket...</div></>
-              )}
-            </div>
-          ) : machines.map(m => (
-            <MachineCard key={m.machine_id} machine={m}
-              selected={selected === m.machine_id}
-              onClick={() => setSelected(selected === m.machine_id ? null : m.machine_id)}
-            />
-          ))}
-        </div>
-
-        {/* Detail panel */}
-        {selectedMachine && (
-          <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '20px', position: 'sticky', top: 80 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
-              <Cpu size={16} color={TEAL}/>
-              <span style={{ fontSize: 13, fontWeight: 700, color: '#e8f0ee', flex: 1 }}>{selectedMachine.machine_name}</span>
-              <button onClick={() => setSelected(null)} style={{ background: 'none', border: 'none', color: MUTED, cursor: 'pointer', fontSize: 16 }}>✕</button>
-            </div>
-
-            {/* Program */}
-            {selectedMachine.current_program && (
-              <div style={{ padding: '8px 12px', background: SURFACE2, borderRadius: 8, marginBottom: 16, display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 10, color: MUTED }}>Program</span>
-                <span style={{ fontSize: 12, fontFamily: 'monospace', color: TEAL, fontWeight: 700 }}>{selectedMachine.current_program}</span>
-              </div>
-            )}
-
-            {/* All gauges */}
-            <div style={{ marginBottom: 16 }}>
-              <GaugeBar value={selectedMachine.spindle_load} label="Spindle Load" unit="%" color={TEAL}/>
-              <GaugeBar value={selectedMachine.spindle_speed} max={8000} label="Spindle Speed" unit=" rpm" color="#F5BC54"/>
-              <GaugeBar value={selectedMachine.feed_rate} max={5000} label="Feed Rate" unit=" mm/min" color="#60A5FA"/>
-              <GaugeBar value={selectedMachine.x_axis_load} label="X Axis" unit="%" color="#A78BFA"/>
-              <GaugeBar value={selectedMachine.y_axis_load} label="Y Axis" unit="%" color="#A78BFA"/>
-              <GaugeBar value={selectedMachine.z_axis_load} label="Z Axis" unit="%" color="#A78BFA"/>
-              <GaugeBar value={selectedMachine.vibration} max={5} label="Vibration" unit="g" color="#F5BC54"/>
-              <GaugeBar value={selectedMachine.temperature} max={80} label="Temperature" unit="°C" color="#FB923C"/>
-            </div>
-
-            {/* Sparkline */}
-            {machineHistory.length > 3 && (
-              <div style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 10, color: MUTED, marginBottom: 6 }}>SPINDLE TREND (zadnjih 30 uzoraka)</div>
-                <SparkLine data={machineHistory} color={TEAL}/>
-              </div>
-            )}
-
-            {/* Stats */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-              {[
-                ['Tool No.', `T${selectedMachine.tool_number?.toString().padStart(2,'0')}`, TEAL],
-                ['Parts', selectedMachine.part_count, '#4ADE80'],
-                ['Cycle', `${selectedMachine.cycle_time_sec}s`, '#60A5FA'],
-                ['Status', STATUS_CONFIG[selectedMachine.status]?.label, STATUS_CONFIG[selectedMachine.status]?.color],
-              ].map(([label, val, color]) => (
-                <div key={label} style={{ background: SURFACE2, borderRadius: 8, padding: '10px 12px', border: `1px solid ${BORDER}` }}>
-                  <div style={{ fontSize: 9, color: MUTED, marginBottom: 3 }}>{label}</div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: color || GRAY }}>{val}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Active alerts for this machine */}
-            {selectedMachine.alerts?.length > 0 && (
-              <div style={{ marginTop: 14 }}>
-                <div style={{ fontSize: 10, color: '#F87171', letterSpacing: 1, marginBottom: 8 }}>AKTIVNI ALARMI</div>
-                {selectedMachine.alerts.map((a, i) => (
-                  <div key={i} style={{ padding: '8px 10px', background: `#F8717112`, border: `1px solid #F8717133`, borderRadius: 8, marginBottom: 6, fontSize: 11, color: '#F87171' }}>
-                    {a.message}
+        <div style={{ overflowY: 'auto', padding: 20 }}>
+          {Object.entries(byModule).map(([mod, ps]) => (
+            <div key={mod} style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 10, color: C.accent, letterSpacing: 1.4, textTransform: 'uppercase', marginBottom: 6 }}>{mod}</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {ps.map(p => (
+                  <div key={p.name} style={{ background: C.green+'18', border: `1px solid ${C.green}44`, borderRadius: 6, padding: '3px 10px', display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <CheckCircle size={10} color={C.green}/>
+                    <span style={{ fontSize: 11, color: C.green }}>{p.name}</span>
                   </div>
                 ))}
               </div>
-            )}
-          </div>
-        )}
+            </div>
+          ))}
+          {Object.keys(byModule).length === 0 && <div style={{ color: C.muted, textAlign: 'center', padding: 20 }}>Nema dodijeljenih dozvola</div>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Main Page ─────────────────────────────────────────────────────────────────
+export default function UserManagementPage() {
+  const { user: me } = useAuth()
+  const [users, setUsers] = useState([])
+  const [roles, setRoles] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [modal, setModal] = useState(null)
+  const [permModal, setPermModal] = useState(null)
+  const [search, setSearch] = useState('')
+  const [, showToast] = useToast()
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    const [u, r] = await Promise.all([api.get('/users'), api.get('/users/roles/all').catch(() => ({ data: [] }))])
+    setUsers(u.data)
+    setRoles(r.data)
+    setLoading(false)
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const deactivate = async (id) => {
+    if (!confirm('Deaktivirati korisnika?')) return
+    await api.delete(`/users/${id}`)
+    load()
+  }
+
+  const filtered = users.filter(u =>
+    !search || `${u.first_name} ${u.last_name} ${u.username} ${u.email}`.toLowerCase().includes(search.toLowerCase())
+  )
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <div style={{ fontSize: 24, fontWeight: 700, color: C.gray, letterSpacing: 1 }}>Upravljanje korisnicima</div>
+          <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>RBAC uloge · Dozvole · Kreiranje korisnika</div>
+        </div>
+        <button onClick={() => setModal('new')} style={S.btn()}>
+          <Plus size={15}/> Novi korisnik
+        </button>
       </div>
 
-      <style>{`
-        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
-      `}</style>
+      {/* Stats */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14 }}>
+        <div style={{ ...S.card, borderTop: `3px solid ${C.teal}`, padding: '14px 18px' }}>
+          <div style={{ fontSize: 10, color: C.muted, letterSpacing: 1.2, textTransform: 'uppercase' }}>Ukupno korisnika</div>
+          <div style={{ fontSize: 30, fontWeight: 700, color: C.teal }}>{users.length}</div>
+        </div>
+        <div style={{ ...S.card, borderTop: `3px solid ${C.green}`, padding: '14px 18px' }}>
+          <div style={{ fontSize: 10, color: C.muted, letterSpacing: 1.2, textTransform: 'uppercase' }}>Aktivni</div>
+          <div style={{ fontSize: 30, fontWeight: 700, color: C.green }}>{users.filter(u => u.active).length}</div>
+        </div>
+        <div style={{ ...S.card, borderTop: `3px solid ${C.accent}`, padding: '14px 18px' }}>
+          <div style={{ fontSize: 10, color: C.muted, letterSpacing: 1.2, textTransform: 'uppercase' }}>Uloge</div>
+          <div style={{ fontSize: 30, fontWeight: 700, color: C.accent }}>{roles.length}</div>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div style={{ ...S.card, padding: 0, overflow: 'hidden' }}>
+        <div style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: `1px solid ${C.border}` }}>
+          <Users size={15} color={C.accent}/>
+          <span style={{ color: C.gray, fontWeight: 600 }}>Korisnici</span>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Pretraži..." style={{ ...S.input, width: 200, padding: '6px 10px', marginLeft: 'auto' }}/>
+        </div>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead style={{ background: C.surface2 }}>
+            <tr>
+              {['Korisnik', 'Korisničko ime', 'Email', 'Osnovna uloga', 'RBAC uloge', 'Status', ''].map(h => (
+                <th key={h} style={S.th}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {loading && <tr><td colSpan={7} style={{ ...S.td, textAlign: 'center', padding: 30 }}>Učitavanje...</td></tr>}
+            {filtered.map(u => (
+              <tr key={u.id} style={{ transition: 'background .15s' }}
+                onMouseOver={e => e.currentTarget.style.background = C.surface2}
+                onMouseOut={e => e.currentTarget.style.background = 'transparent'}>
+                <td style={S.td}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: `${C.accent}22`, border: `1px solid ${C.accent}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: C.accent }}>{(u.first_name?.[0] || '?').toUpperCase()}</span>
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 600, color: C.gray }}>{u.first_name} {u.last_name}</div>
+                    </div>
+                  </div>
+                </td>
+                <td style={{ ...S.td, color: C.muted, fontFamily: 'monospace', fontSize: 12 }}>{u.username}</td>
+                <td style={{ ...S.td, fontSize: 12 }}>{u.email || '—'}</td>
+                <td style={S.td}>
+                  <span style={{ background: C.surface3, color: C.muted, borderRadius: 6, padding: '2px 8px', fontSize: 11 }}>{u.role}</span>
+                </td>
+                <td style={S.td}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                    {u.roles?.length > 0
+                      ? u.roles.map((r, i) => <RoleBadge key={i} name={r} label={u.roles_labels?.[i] || r}/>)
+                      : <span style={{ fontSize: 11, color: C.muted }}>—</span>}
+                  </div>
+                </td>
+                <td style={S.td}>
+                  {u.active
+                    ? <span style={{ color: C.green, display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}><UserCheck size={13}/> Aktivan</span>
+                    : <span style={{ color: C.muted, display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}><UserX size={13}/> Neaktivan</span>}
+                </td>
+                <td style={{ ...S.td }}>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <button onClick={() => setPermModal(u)} title="Dozvole" style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted, padding: 3 }}
+                      onMouseOver={e => e.currentTarget.style.color = C.blue} onMouseOut={e => e.currentTarget.style.color = C.muted}>
+                      <Shield size={13}/>
+                    </button>
+                    <button onClick={() => setModal(u)} title="Uredi" style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted, padding: 3 }}
+                      onMouseOver={e => e.currentTarget.style.color = C.accent} onMouseOut={e => e.currentTarget.style.color = C.muted}>
+                      <Edit2 size={13}/>
+                    </button>
+                    {u.id !== me?.id && (
+                      <button onClick={() => deactivate(u.id)} title="Deaktiviraj" style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted, padding: 3 }}
+                        onMouseOver={e => e.currentTarget.style.color = C.red} onMouseOut={e => e.currentTarget.style.color = C.muted}>
+                        <Lock size={13}/>
+                      </button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Modals */}
+      {modal && (
+        <UserModal
+          user={modal === 'new' ? null : modal}
+          roles={roles}
+          onClose={() => setModal(null)}
+          onSaved={() => { setModal(null); load() }}
+        />
+      )}
+      {permModal && (
+        <PermissionsModal
+          userId={permModal.id}
+          userName={`${permModal.first_name} ${permModal.last_name}`}
+          onClose={() => setPermModal(null)}
+        />
+      )}
     </div>
   )
 }

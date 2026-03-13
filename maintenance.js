@@ -1,40 +1,86 @@
-const router = require('express').Router()
-const db = require('../db')
+const express = require('express')
+const router = express.Router()
 const { auth } = require('../middleware/auth')
+const db = require('../db')
 
-router.get('/', auth, (req, res) => {
-  res.json(db.prepare('SELECT m.*, l.full_label as location_label FROM machines m LEFT JOIN locations l ON m.location_id=l.id ORDER BY m.name').all())
+router.use(auth)
+
+// GET all kalkulacije
+router.get('/', (req, res) => {
+  try {
+    const rows = db.all(`
+      SELECT k.*, u.first_name || ' ' || u.last_name as kreirao_ime
+      FROM kalkulacije k
+      LEFT JOIN users u ON k.kreirao_id = u.id
+      ORDER BY k.created_at DESC
+    `)
+    res.json(rows)
+  } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
-router.post('/', auth, (req, res) => {
-  const { machine_id, name, manufacturer, type, table_size, max_load, location_id, notes } = req.body
-  if (!name) return res.status(400).json({ error: 'Name required' })
-  const mid = machine_id || 'STR-' + Date.now()
-  const r = db.prepare('INSERT INTO machines (machine_id,name,manufacturer,type,table_size,max_load,location_id,notes) VALUES (?,?,?,?,?,?,?,?)').run(mid,name,manufacturer,type,table_size,max_load,location_id,notes)
-  res.json(db.prepare('SELECT * FROM machines WHERE id=?').get(r.lastInsertRowid))
+// GET single kalkulacija
+router.get('/:id', (req, res) => {
+  try {
+    const k = db.get('SELECT * FROM kalkulacije WHERE id = ?', [req.params.id])
+    if (!k) return res.status(404).json({ error: 'Not found' })
+    k.data = JSON.parse(k.data || '{}')
+    res.json(k)
+  } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
-router.put('/:id', auth, (req, res) => {
-  const { name, manufacturer, type, table_size, max_load, location_id, status, notes } = req.body
-  db.prepare('UPDATE machines SET name=?,manufacturer=?,type=?,table_size=?,max_load=?,location_id=?,status=?,notes=? WHERE id=?').run(name,manufacturer,type,table_size,max_load,location_id,status||'idle',notes,req.params.id)
-  res.json(db.prepare('SELECT * FROM machines WHERE id=?').get(req.params.id))
+// POST create nova kalkulacija
+router.post('/', (req, res) => {
+  try {
+    const { naziv, broj_nacrta, materijal, naziv_dijela, ident_nr, varijanta, data, status, napomena } = req.body
+    const result = db.prepare(`
+      INSERT INTO kalkulacije (naziv, broj_nacrta, materijal, naziv_dijela, ident_nr, varijanta, data, status, napomena, kreirao_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+    `).run(naziv, broj_nacrta || '', materijal || '', naziv_dijela || '', ident_nr || '', varijanta || '50', JSON.stringify(data || {}), status || 'draft', napomena || '', req.user.id)
+    const created = db.get('SELECT * FROM kalkulacije WHERE id = ?', [result.lastInsertRowid])
+    created.data = JSON.parse(created.data || '{}')
+    res.json(created)
+  } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
-router.delete('/:id', auth, (req, res) => {
-  db.prepare('DELETE FROM machines WHERE id=?').run(req.params.id)
-  res.json({ ok: true })
+// PUT update kalkulacija
+router.put('/:id', (req, res) => {
+  try {
+    const { naziv, broj_nacrta, materijal, naziv_dijela, ident_nr, varijanta, data, status, napomena } = req.body
+    db.prepare(`
+      UPDATE kalkulacije SET naziv=?, broj_nacrta=?, materijal=?, naziv_dijela=?, ident_nr=?, varijanta=?, data=?, status=?, napomena=?, updated_at=datetime('now')
+      WHERE id=?
+    `).run(naziv, broj_nacrta || '', materijal || '', naziv_dijela || '', ident_nr || '', varijanta || '50', JSON.stringify(data || {}), status || 'draft', napomena || '', req.params.id)
+    const updated = db.get('SELECT * FROM kalkulacije WHERE id = ?', [req.params.id])
+    updated.data = JSON.parse(updated.data || '{}')
+    res.json(updated)
+  } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
-// Telemetry
-router.get('/:id/telemetry', auth, (req, res) => {
-  const rows = db.prepare('SELECT * FROM machine_telemetry WHERE machine_id=? ORDER BY recorded_at DESC LIMIT 100').all(req.params.id)
-  res.json(rows)
+// DELETE kalkulacija
+router.delete('/:id', (req, res) => {
+  try {
+    db.prepare('DELETE FROM kalkulacije WHERE id = ?').run(req.params.id)
+    res.json({ ok: true })
+  } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
-router.post('/:id/telemetry', auth, (req, res) => {
-  const { temperature, spindle_speed, feed_rate, vibration, power_kw, status } = req.body
-  const r = db.prepare('INSERT INTO machine_telemetry (machine_id,temperature,spindle_speed,feed_rate,vibration,power_kw,status) VALUES (?,?,?,?,?,?,?)').run(req.params.id,temperature,spindle_speed,feed_rate,vibration,power_kw,status||'running')
-  res.json({ id: r.lastInsertRowid })
+// POST duplicate kalkulacija
+router.post('/:id/duplicate', (req, res) => {
+  try {
+    const original = db.get('SELECT * FROM kalkulacije WHERE id = ?', [req.params.id])
+    if (!original) return res.status(404).json({ error: 'Not found' })
+    const result = db.prepare(`
+      INSERT INTO kalkulacije (naziv, broj_nacrta, materijal, naziv_dijela, ident_nr, varijanta, data, status, napomena, kreirao_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, datetime('now'), datetime('now'))
+    `).run(
+      original.naziv + ' (kopija)', original.broj_nacrta, original.materijal,
+      original.naziv_dijela, original.ident_nr, original.varijanta,
+      original.data, original.napomena, req.user.id
+    )
+    const created = db.get('SELECT * FROM kalkulacije WHERE id = ?', [result.lastInsertRowid])
+    created.data = JSON.parse(created.data || '{}')
+    res.json(created)
+  } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
 module.exports = router

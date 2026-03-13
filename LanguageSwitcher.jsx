@@ -1,755 +1,701 @@
 import { useState, useEffect, useCallback } from 'react'
-import { C, useToast, StatCard } from '../components/UI'
+import { C, useToast } from '../components/UI'
 import api from '../utils/api'
 import {
-  Plus, RefreshCw, Building2, FileSearch, ShoppingCart, Receipt,
-  X, Check, ChevronDown, ChevronUp, Search, Trash2, ArrowRight,
-  TrendingUp, Clock, AlertTriangle, DollarSign, Edit2, Eye, FileText
+  TrendingUp, TrendingDown, DollarSign, Target, Activity, Cpu,
+  FileText, Plus, Edit2, Trash2, X, Save, Download, ChevronDown, ChevronUp
 } from 'lucide-react'
 
-// ─── COLOUR HELPERS ──────────────────────────────────────────────────────────
-const SC = {
-  novo: C.blue, u_obradi: C.orange, ponuda_poslana: C.teal, narudžba: C.green,
-  odbijen: C.red, otkazan: C.muted, nova: C.blue, potvrđena: C.teal,
-  u_izradi: C.orange, sprema_za_otpremu: C.accent, isporučena: C.green,
-  fakturirana: C.green, otkazana: C.red, nacrt: C.muted, poslana: C.blue,
-  prihvaćena: C.green, odbijena: C.red, plaćena: C.green,
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const EUR  = v => `€ ${(v||0).toLocaleString('hr-HR',{minimumFractionDigits:2,maximumFractionDigits:2})}`
+const PCT  = v => `${(v||0).toFixed(1)} %`
+const MJ   = ['','Sij','Velj','Ožu','Tra','Svi','Lip','Srp','Kol','Ruj','Lis','Stu','Pro']
+const BKAT = ['Materijal','Rad','Režija','Stroj','Alati','Transport','Ostalo']
+const NKAT = ['Materijal','Strojni sat','Rad operatera','Alati','Kooperacija','Ostalo']
+
+// ─── Shared styles (DEER style) ───────────────────────────────────────────────
+const S = {
+  card:  { background:`linear-gradient(145deg,${C.surface},${C.surface2})`, border:`1px solid ${C.border}`, borderRadius:14, padding:20, boxShadow:'0 4px 16px rgba(0,0,0,.2)' },
+  input: { background:C.surface2, border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 12px', color:C.gray, fontSize:13, outline:'none', width:'100%', boxSizing:'border-box' },
+  label: { fontSize:11, color:C.muted, letterSpacing:1.2, textTransform:'uppercase', marginBottom:4, display:'block' },
+  btn:   (col=C.accent)=>({ background:col, border:'none', borderRadius:8, padding:'8px 16px', color:col===C.accent?'#1a2a28':C.gray, fontWeight:600, fontSize:13, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }),
+  ghost: { background:'transparent', border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 14px', color:C.muted, fontSize:13, cursor:'pointer', display:'flex', alignItems:'center', gap:6 },
+  th:    { padding:'9px 12px', fontSize:10, color:C.muted, letterSpacing:1.2, textTransform:'uppercase', textAlign:'left', borderBottom:`1px solid ${C.border}`, whiteSpace:'nowrap' },
+  td:    { padding:'10px 12px', fontSize:13, color:C.gray, borderBottom:`1px solid ${C.border}22`, verticalAlign:'middle' },
 }
-const Pill = ({ s }) => (
-  <span style={{ background: `${SC[s] || C.muted}22`, color: SC[s] || C.muted, border: `1px solid ${SC[s] || C.muted}44`, borderRadius: 20, padding: '2px 10px', fontSize: 11, fontWeight: 700, letterSpacing: 0.5, whiteSpace: 'nowrap' }}>{s?.toUpperCase()}</span>
-)
 
-// ─── REUSABLE UI ─────────────────────────────────────────────────────────────
-const Btn = ({ onClick, children, color = C.accent, sm, danger, style = {} }) => (
-  <button onClick={onClick} style={{ background: danger ? C.red : color, color: (sm && color !== C.accent) ? C.gray : C.bg, border: 'none', borderRadius: sm ? 6 : 8, padding: sm ? '4px 10px' : '9px 18px', cursor: 'pointer', fontSize: sm ? 11 : 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4, transition: 'opacity .15s', ...style }} onMouseOver={e => e.currentTarget.style.opacity = '.8'} onMouseOut={e => e.currentTarget.style.opacity = '1'}>{children}</button>
-)
-
-const Inp = ({ label, ...p }) => (
-  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-    {label && <label style={{ fontSize: 11, color: C.muted, letterSpacing: 1, textTransform: 'uppercase' }}>{label}</label>}
-    <input {...p} style={{ background: C.surface3, border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 12px', color: C.gray, fontSize: 13, outline: 'none', width: '100%', boxSizing: 'border-box', ...p.style }} />
-  </div>
-)
-
-const Sel = ({ label, children, ...p }) => (
-  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-    {label && <label style={{ fontSize: 11, color: C.muted, letterSpacing: 1, textTransform: 'uppercase' }}>{label}</label>}
-    <select {...p} style={{ background: C.surface3, border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 12px', color: C.gray, fontSize: 13, outline: 'none', ...p.style }}>{children}</select>
-  </div>
-)
-
-const Textarea = ({ label, ...p }) => (
-  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-    {label && <label style={{ fontSize: 11, color: C.muted, letterSpacing: 1, textTransform: 'uppercase' }}>{label}</label>}
-    <textarea {...p} rows={3} style={{ background: C.surface3, border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 12px', color: C.gray, fontSize: 13, outline: 'none', resize: 'vertical', ...p.style }} />
-  </div>
-)
-
-const Modal = ({ title, onClose, children, wide }) => (
-  <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.75)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={e => e.target === e.currentTarget && onClose()}>
-    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, width: '100%', maxWidth: wide ? 780 : 560, maxHeight: '92vh', overflowY: 'auto', padding: 28 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <h3 style={{ color: C.accent, margin: 0, fontSize: 16, fontFamily: "'Chakra Petch',sans-serif" }}>{title}</h3>
-        <X size={18} style={{ cursor: 'pointer', color: C.muted }} onClick={onClose} />
-      </div>
-      {children}
-    </div>
-  </div>
-)
-
-const Divider = () => <div style={{ borderTop: `1px solid ${C.border}`, margin: '16px 0' }} />
-
-const fmt = (n, currency = 'EUR') => Number(n || 0).toLocaleString('hr-HR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + currency
-const fmtDate = d => d ? new Date(d).toLocaleDateString('hr-HR') : '—'
-const isOverdue = d => d && new Date(d) < new Date()
-
-// ─── SEARCH BAR ──────────────────────────────────────────────────────────────
-const SearchBar = ({ value, onChange, placeholder }) => (
-  <div style={{ position: 'relative', flex: 1, minWidth: 180 }}>
-    <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: C.muted }} />
-    <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder || 'Pretraga...'} style={{ background: C.surface3, border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 12px 8px 32px', color: C.gray, fontSize: 13, outline: 'none', width: '100%', boxSizing: 'border-box' }} />
-  </div>
-)
-
-// ─── POSITIONS TABLE ─────────────────────────────────────────────────────────
-const PositionRow = ({ pos, onDelete, editable }) => (
-  <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-    <td style={{ padding: '8px 6px', color: C.muted, fontSize: 12 }}>{pos.position_no}</td>
-    <td style={{ padding: '8px 6px', color: C.gray, fontSize: 13, fontWeight: 600 }}>{pos.part_name || '—'}</td>
-    <td style={{ padding: '8px 6px', color: C.muted, fontSize: 12 }}>{pos.drawing_number || '—'}</td>
-    <td style={{ padding: '8px 6px', color: C.muted, fontSize: 12 }}>{pos.material || '—'}</td>
-    <td style={{ padding: '8px 6px', color: C.gray, fontSize: 12, textAlign: 'right' }}>{pos.quantity} {pos.unit}</td>
-    <td style={{ padding: '8px 6px', color: C.gray, fontSize: 12, textAlign: 'right' }}>{fmt(pos.unit_price)}</td>
-    <td style={{ padding: '8px 6px', color: C.accent, fontSize: 13, fontWeight: 700, textAlign: 'right' }}>{fmt(pos.total_price)}</td>
-    {editable && <td style={{ padding: '8px 6px' }}><Trash2 size={13} style={{ color: C.red, cursor: 'pointer' }} onClick={onDelete} /></td>}
-  </tr>
-)
-
-const PositionsTable = ({ positions, editable, onDelete }) => (
-  <div style={{ overflowX: 'auto', marginTop: 8 }}>
-    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-      <thead>
-        <tr style={{ background: C.surface3 }}>
-          {['#', 'Naziv dijela', 'Crtež', 'Materijal', 'Kol.', 'Jed. cijena', 'Ukupno', editable ? '' : null].filter(Boolean).map(h => (
-            <th key={h} style={{ padding: '7px 6px', color: C.muted, fontWeight: 700, letterSpacing: 0.5, textAlign: h === '#' ? 'left' : 'right', fontSize: 10, textTransform: 'uppercase' }}>{h}</th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {positions.map((p, i) => <PositionRow key={p.id || i} pos={p} editable={editable} onDelete={() => onDelete(p.id)} />)}
-      </tbody>
-      <tfoot>
-        <tr>
-          <td colSpan={editable ? 6 : 6} style={{ padding: '8px 6px', color: C.muted, fontSize: 12, textAlign: 'right', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>Ukupno bez PDV:</td>
-          <td style={{ padding: '8px 6px', color: C.accent, fontSize: 14, fontWeight: 700, textAlign: 'right' }}>{fmt(positions.reduce((s, p) => s + (p.total_price || 0), 0))}</td>
-          {editable && <td />}
-        </tr>
-      </tfoot>
-    </table>
-  </div>
-)
-
-// ─── ADD POSITION FORM ───────────────────────────────────────────────────────
-const AddPositionForm = ({ onAdd }) => {
-  const [p, setP] = useState({ part_name: '', drawing_number: '', material: '', quantity: 1, unit: 'kom', unit_price: '', delivery_weeks: '', notes: '' })
-  const set = k => e => setP(prev => ({ ...prev, [k]: e.target.value }))
-  const total = (parseFloat(p.quantity) || 0) * (parseFloat(p.unit_price) || 0)
+// ─── KPI Tile (same pattern as KPIPage Tile) ─────────────────────────────────
+function Tile({ label, value, sub, color=C.accent, warn }) {
   return (
-    <div style={{ background: C.surface3, borderRadius: 10, padding: 14, marginTop: 10 }}>
-      <div style={{ fontSize: 11, color: C.teal, fontWeight: 700, letterSpacing: 1, marginBottom: 10 }}>+ NOVA POZICIJA</div>
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
-        <Inp label="Naziv dijela *" value={p.part_name} onChange={set('part_name')} />
-        <Inp label="Br. crteža" value={p.drawing_number} onChange={set('drawing_number')} />
-        <Inp label="Materijal" value={p.material} onChange={set('material')} />
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, marginBottom: 10 }}>
-        <Inp label="Količina" type="number" value={p.quantity} onChange={set('quantity')} />
-        <Sel label="Jed." value={p.unit} onChange={set('unit')}>
-          {['kom','m','m²','m³','kg','t','h','set'].map(u => <option key={u}>{u}</option>)}
-        </Sel>
-        <Inp label="Jed. cijena (EUR)" type="number" value={p.unit_price} onChange={set('unit_price')} />
-        <Inp label="Rok (tjedni)" type="number" value={p.delivery_weeks} onChange={set('delivery_weeks')} />
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ color: C.accent, fontWeight: 700, fontSize: 14 }}>Ukupno: {fmt(total)}</span>
-        <Btn onClick={() => { if (!p.part_name) return; onAdd(p); setP({ part_name: '', drawing_number: '', material: '', quantity: 1, unit: 'kom', unit_price: '', delivery_weeks: '', notes: '' }) }}><Plus size={13} /> Dodaj poziciju</Btn>
-      </div>
+    <div style={{ background:`linear-gradient(145deg,${C.surface},${C.surface2})`, border:`1px solid ${warn?color:C.border}`, borderRadius:14, padding:'16px 20px', position:'relative', overflow:'hidden' }}>
+      <div style={{ position:'absolute', top:0, left:0, right:0, height:3, background:`linear-gradient(90deg,${color},${color}88)` }}/>
+      <div style={{ fontSize:10, color:C.muted, letterSpacing:1.5, textTransform:'uppercase', marginBottom:6 }}>{label}</div>
+      <div style={{ fontSize:30, fontWeight:700, color, lineHeight:1, fontFamily:"'Chakra Petch',sans-serif" }}>{value ?? '—'}</div>
+      {sub && <div style={{ fontSize:11, color:C.muted, marginTop:4 }}>{sub}</div>}
     </div>
   )
 }
 
-// ─── MINI BAR CHART ──────────────────────────────────────────────────────────
-const RevenueChart = ({ data }) => {
-  if (!data || data.length === 0) return <div style={{ color: C.muted, textAlign: 'center', padding: 20, fontSize: 12 }}>Nema podataka o prihodu</div>
-  const max = Math.max(...data.map(d => d.revenue), 1)
+// ─── SVG Bar Chart (no external deps) ────────────────────────────────────────
+function BarChart({ data, keys, colors, height=160 }) {
+  if (!data?.length) return <div style={{ color:C.muted, fontSize:12, textAlign:'center', padding:30 }}>Nema podataka</div>
+  const allVals = data.flatMap(d => keys.map(k => d[k]||0))
+  const maxVal  = Math.max(...allVals, 1)
+  const barW    = Math.floor((360 / data.length) / keys.length) - 4
+  const groupW  = Math.floor(360 / data.length)
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 80, padding: '0 4px' }}>
-      {data.slice(-12).map((d, i) => (
-        <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-          <div style={{ width: '100%', background: `${C.accent}33`, borderRadius: '4px 4px 0 0', height: Math.max(4, (d.revenue / max) * 64), position: 'relative', overflow: 'hidden' }}>
-            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: C.accent, height: `${(d.revenue / max) * 100}%`, borderRadius: '4px 4px 0 0', transition: 'height .5s' }} />
-          </div>
-          <span style={{ fontSize: 9, color: C.muted, transform: 'rotate(-45deg)', transformOrigin: 'center', whiteSpace: 'nowrap' }}>{d.month?.slice(5)}</span>
+    <svg width="100%" viewBox={`0 0 360 ${height+30}`} style={{ overflow:'visible' }}>
+      {/* Y grid lines */}
+      {[0,0.25,0.5,0.75,1].map(f => (
+        <g key={f}>
+          <line x1={0} y1={height*(1-f)} x2={360} y2={height*(1-f)} stroke={C.border} strokeWidth={0.5} strokeDasharray="4 4"/>
+          <text x={-4} y={height*(1-f)+4} fill={C.muted} fontSize={8} textAnchor="end">{Math.round(maxVal*f).toLocaleString()}</text>
+        </g>
+      ))}
+      {data.map((d, i) => (
+        <g key={i} transform={`translate(${i*groupW},0)`}>
+          {keys.map((k, ki) => {
+            const val = d[k]||0
+            const bh  = Math.max(2, (val/maxVal)*height)
+            return (
+              <g key={k}>
+                <rect x={ki*(barW+2)+2} y={height-bh} width={barW} height={bh} rx={3} fill={colors[ki]} opacity={0.85}/>
+                <title>{k}: {val.toLocaleString()}</title>
+              </g>
+            )
+          })}
+          <text x={groupW/2} y={height+14} fill={C.muted} fontSize={9} textAnchor="middle">{d.name||d.label}</text>
+        </g>
+      ))}
+    </svg>
+  )
+}
+
+// ─── SVG Line Chart ───────────────────────────────────────────────────────────
+function LineChart({ data, keys, colors, height=140 }) {
+  if (!data?.length) return <div style={{ color:C.muted, fontSize:12, textAlign:'center', padding:30 }}>Nema podataka</div>
+  const allVals = data.flatMap(d => keys.map(k => d[k]||0))
+  const maxVal  = Math.max(...allVals, 1)
+  const w = 360
+  return (
+    <svg width="100%" viewBox={`0 0 ${w} ${height+24}`} style={{ overflow:'visible' }}>
+      {[0,0.25,0.5,0.75,1].map(f => (
+        <line key={f} x1={0} y1={height*(1-f)} x2={w} y2={height*(1-f)} stroke={C.border} strokeWidth={0.5} strokeDasharray="4 4"/>
+      ))}
+      {keys.map((k, ki) => {
+        const pts = data.map((d,i) => {
+          const x = data.length > 1 ? (i/(data.length-1))*w : w/2
+          const y = height - ((d[k]||0)/maxVal)*height
+          return `${x},${y}`
+        }).join(' ')
+        const fill = data.map((d,i) => {
+          const x = data.length > 1 ? (i/(data.length-1))*w : w/2
+          const y = height - ((d[k]||0)/maxVal)*height
+          return `${x},${y}`
+        })
+        return (
+          <g key={k}>
+            <polyline points={`0,${height} ${pts} ${w},${height}`} fill={colors[ki]+'18'} stroke="none"/>
+            <polyline points={pts} fill="none" stroke={colors[ki]} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/>
+            {data.map((d,i) => {
+              const x = data.length > 1 ? (i/(data.length-1))*w : w/2
+              const y = height - ((d[k]||0)/maxVal)*height
+              return <circle key={i} cx={x} cy={y} r={3} fill={colors[ki]}><title>{k}: {(d[k]||0).toLocaleString()}</title></circle>
+            })}
+          </g>
+        )
+      })}
+      {data.map((d,i) => (
+        <text key={i} x={data.length>1?(i/(data.length-1))*w:w/2} y={height+16} fill={C.muted} fontSize={9} textAnchor="middle">{d.label||d.mj}</text>
+      ))}
+    </svg>
+  )
+}
+
+// ─── SVG Donut / Pie ──────────────────────────────────────────────────────────
+function DonutChart({ segments, size=120 }) {
+  const total = segments.reduce((s,x)=>s+(x.value||0),0)
+  if (!total) return <div style={{ color:C.muted, fontSize:12, textAlign:'center', padding:20 }}>Nema podataka</div>
+  const r=46, cx=60, cy=60, circ=2*Math.PI*r
+  let offset=0
+  return (
+    <svg width={size} height={size} viewBox="0 0 120 120">
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke={C.surface3} strokeWidth={14}/>
+      {segments.map((seg,i) => {
+        const dash = (seg.value/total)*circ
+        const el = (
+          <circle key={i} cx={cx} cy={cy} r={r} fill="none" stroke={seg.color} strokeWidth={14}
+            strokeDasharray={`${dash} ${circ}`} strokeDashoffset={-offset}
+            style={{ transform:'rotate(-90deg)', transformOrigin:'60px 60px', transition:'stroke-dasharray .5s ease' }}>
+            <title>{seg.label}: {EUR(seg.value)}</title>
+          </circle>
+        )
+        offset += dash
+        return el
+      })}
+      <text x={60} y={57} fill={C.gray} fontSize={10} fontWeight={700} textAnchor="middle">{segments.length}</text>
+      <text x={60} y={69} fill={C.muted} fontSize={7} textAnchor="middle">stavki</text>
+    </svg>
+  )
+}
+
+// ─── Legend ───────────────────────────────────────────────────────────────────
+function Legend({ items }) {
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+      {items.map((it,i) => (
+        <div key={i} style={{ display:'flex', alignItems:'center', gap:7 }}>
+          <div style={{ width:10, height:10, borderRadius:2, background:it.color, flexShrink:0 }}/>
+          <span style={{ fontSize:11, color:C.gray, flex:1 }}>{it.label}</span>
+          {it.value !== undefined && <span style={{ fontSize:11, fontWeight:700, color:it.color }}>{typeof it.value==='number'&&it.value>100?EUR(it.value):it.value}</span>}
         </div>
       ))}
     </div>
   )
 }
 
-// ─── ACTIVITY FEED ───────────────────────────────────────────────────────────
-const ActivityFeed = ({ activities }) => (
-  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-    {(activities || []).slice(0, 8).map((a, i) => (
-      <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '6px 0', borderBottom: `1px solid ${C.border}33` }}>
-        <div style={{ width: 6, height: 6, borderRadius: '50%', background: a.action === 'paid' ? C.green : a.action === 'create' ? C.teal : C.accent, marginTop: 5, flexShrink: 0 }} />
-        <div>
-          <div style={{ color: C.gray, fontSize: 12 }}>{a.description}</div>
-          <div style={{ color: C.muted, fontSize: 10 }}>{a.username} · {new Date(a.created_at).toLocaleString('hr-HR')}</div>
-        </div>
-      </div>
-    ))}
-    {!activities?.length && <div style={{ color: C.muted, fontSize: 12, textAlign: 'center', padding: 16 }}>Nema aktivnosti</div>}
-  </div>
-)
+// ─── Section header (DEER style) ─────────────────────────────────────────────
+function SectionHead({ color=C.teal, label }) {
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:12 }}>
+      <div style={{ width:3, height:16, background:`linear-gradient(${color},${color}44)`, borderRadius:2 }}/>
+      <div style={{ fontSize:10, color, letterSpacing:2 }}>{label}</div>
+    </div>
+  )
+}
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// MAIN COMPONENT
-// ═══════════════════════════════════════════════════════════════════════════════
-export default function SalesPage() {
-  const [tab, setTab] = useState('dashboard')
-  const [data, setData] = useState({ rfqs: [], orders: [], partners: [], invoices: [], stats: { rfq: {}, order: {} }, invStats: {}, revenue: [], activities: [] })
-  const [loading, setLoading] = useState(false)
-  const [modal, setModal] = useState(null)  // 'add-rfq' | 'add-order' | 'add-partner' | 'add-invoice' | 'view-rfq' | 'view-order' | 'edit-partner' | 'convert-rfq'
-  const [form, setForm] = useState({})
-  const [positions, setPositions] = useState([])
-  const [selected, setSelected] = useState(null)
-  const [expanded, setExpanded] = useState({})
-  const [search, setSearch] = useState('')
-  const [filterStatus, setFilterStatus] = useState('')
-  const [toast, showToast] = useToast()
+// ─── Modal ────────────────────────────────────────────────────────────────────
+function Modal({ title, onClose, children }) {
+  return (
+    <div onClick={e=>e.target===e.currentTarget&&onClose()}
+      style={{ position:'fixed', inset:0, background:'rgba(10,20,18,.88)', backdropFilter:'blur(6px)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+      <div style={{ background:`linear-gradient(145deg,${C.surface},${C.surface2})`, border:`1px solid ${C.border}`, borderRadius:18, width:'100%', maxWidth:480, maxHeight:'90vh', overflowY:'auto', boxShadow:'0 24px 64px rgba(0,0,0,.5)' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'18px 22px', borderBottom:`1px solid ${C.border}44` }}>
+          <span style={{ fontWeight:700, color:C.accent, letterSpacing:1.5, fontFamily:"'Chakra Petch',sans-serif", fontSize:14 }}>{title}</span>
+          <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:C.muted }}><X size={18}/></button>
+        </div>
+        <div style={{ padding:'20px 22px', display:'flex', flexDirection:'column', gap:14 }}>{children}</div>
+      </div>
+    </div>
+  )
+}
+
+function Field({ label, children }) {
+  return <div><label style={S.label}>{label}</label>{children}</div>
+}
+function Inp({ value, onChange, type='text', placeholder='' }) {
+  return <input type={type} value={value||''} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={S.input}/>
+}
+function Sel({ value, onChange, options }) {
+  return (
+    <select value={value||''} onChange={e=>onChange(e.target.value)} style={S.input}>
+      <option value="">— odaberi —</option>
+      {options.map(o=><option key={o.value??o} value={o.value??o}>{o.label??o}</option>)}
+    </select>
+  )
+}
+function SaveRow({ onSave, onClose, loading }) {
+  return (
+    <div style={{ display:'flex', gap:10, paddingTop:6 }}>
+      <button onClick={onSave} disabled={loading} style={{ ...S.btn(), flex:1, justifyContent:'center', opacity:loading?.6:1 }}><Save size={14}/>{loading?'Sprema...':'Spremi'}</button>
+      <button onClick={onClose} style={S.ghost}><X size={13}/> Odustani</button>
+    </div>
+  )
+}
+
+function exportCSV(rows, headers, filename) {
+  const csv = [headers, ...rows].map(r=>r.join(';')).join('\n')
+  const a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv); a.download=filename; a.click()
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// TAB: PREGLED
+// ════════════════════════════════════════════════════════════════════════════
+function TabPregled({ godina }) {
+  const [summary, setSummary] = useState(null)
+  const [trend,   setTrend]   = useState([])
+  const [loading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
     setLoading(true)
-    try {
-      const [rfqs, orders, partners, invoices, rfqStats, orderStats, invStats, revenue, activities] = await Promise.all([
-        api.get('/sales/rfqs'),
-        api.get('/sales/orders'),
-        api.get('/sales/partners'),
-        api.get('/sales/invoices'),
-        api.get('/sales/rfqs/stats').catch(() => ({ data: {} })),
-        api.get('/sales/orders/stats').catch(() => ({ data: {} })),
-        api.get('/sales/invoice/stats').catch(() => ({ data: {} })),
-        api.get('/sales/revenue/monthly').catch(() => ({ data: [] })),
-        api.get('/sales/activities').catch(() => ({ data: [] })),
-      ])
-      setData({ rfqs: rfqs.data, orders: orders.data, partners: partners.data, invoices: invoices.data, stats: { rfq: rfqStats.data, order: orderStats.data }, invStats: invStats.data, revenue: revenue.data, activities: activities.data })
-    } catch { showToast('Greška učitavanja podataka', 'error') }
+    const [s,t] = await Promise.all([
+      api.get(`/kontroling/summary?godina=${godina}`),
+      api.get(`/kontroling/trend?godina=${godina}`)
+    ])
+    setSummary(s.data)
+    setTrend(t.data.map(r=>({...r, label:MJ[r.mj]||r.mj})))
     setLoading(false)
-  }, [])
+  },[godina])
+  useEffect(()=>{ load() },[load])
 
-  useEffect(() => { load() }, [load])
+  if (loading) return <div style={{ color:C.muted, padding:40, textAlign:'center', fontFamily:"'Chakra Petch',sans-serif" }}>Učitavanje...</div>
+  if (!summary) return null
 
-  const inp = k => ({ value: form[k] || '', onChange: e => setForm(p => ({ ...p, [k]: e.target.value })) })
+  const { kpi, budzet, strojniSat } = summary
 
-  const handleSubmit = async () => {
-    try {
-      if (modal === 'add-rfq') await api.post('/sales/rfqs', { ...form, positions })
-      else if (modal === 'add-order') await api.post('/sales/orders', { ...form, positions })
-      else if (modal === 'add-partner') await api.post('/sales/partners', form)
-      else if (modal === 'edit-partner') await api.put(`/sales/partners/${selected?.id}`, form)
-      else if (modal === 'add-invoice') await api.post('/sales/invoices', form)
-      else if (modal === 'convert-rfq') {
-        const res = await api.post(`/sales/rfqs/${selected?.id}/convert`, form)
-        showToast(`Narudžba ${res.data.order.internal_id} kreirana!`)
-        setModal(null); setForm({}); load(); return
-      }
-      showToast('Uspješno spremljeno!')
-      setModal(null); setForm({}); setPositions([])
-      load()
-    } catch (e) { showToast(e.response?.data?.error || 'Greška pri spremanju', 'error') }
-  }
+  const budzetBars = budzet.map(b=>({ name:b.kategorija.slice(0,4), Plan:+(b.plan||0).toFixed(0), Stvarni:+(b.stvarni||0).toFixed(0) }))
+  const strojSegments = strojniSat.filter(s=>s.trosak_ukupno_sat>0).slice(0,5).map((s,i)=>({ label:s.name||`Stroj ${i+1}`, value:+(s.trosak_ukupno_sat||0), color:[C.teal,C.accent,C.blue,C.green,C.orange][i%5] }))
 
-  const updateStatus = async (type, id, status) => {
-    try {
-      await api.put(`/sales/${type}/${id}`, { status })
-      load()
-    } catch { showToast('Greška', 'error') }
-  }
-
-  const deleteEntity = async (type, id) => {
-    if (!window.confirm('Sigurno obrišeš?')) return
-    try { await api.delete(`/sales/${type}/${id}`); load() } catch { showToast('Greška brisanja', 'error') }
-  }
-
-  const markPaid = async (id) => {
-    try { await api.put(`/sales/invoices/${id}/paid`); showToast('Faktura označena kao plaćena!'); load() } catch { showToast('Greška', 'error') }
-  }
-
-  const openView = async (type, id) => {
-    try {
-      const r = await api.get(`/sales/${type}/${id}`)
-      setSelected(r.data); setModal(`view-${type}`)
-    } catch { showToast('Greška učitavanja detalja', 'error') }
-  }
-
-  // ── Filter helpers ──
-  const filterItems = (items) => {
-    let f = items
-    if (search) {
-      const s = search.toLowerCase()
-      f = f.filter(i => JSON.stringify(i).toLowerCase().includes(s))
-    }
-    if (filterStatus) f = f.filter(i => i.status === filterStatus)
-    return f
-  }
-
-  const TAB = (k, l, Ic) => (
-    <button key={k} onClick={() => setTab(k)} style={{ padding: '8px 16px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 700, letterSpacing: 0.5, background: tab === k ? C.accent : 'transparent', color: tab === k ? C.bg : C.muted, border: `1px solid ${tab === k ? C.accent : C.border}`, transition: 'all .2s', display: 'flex', alignItems: 'center', gap: 6 }}>
-      <Ic size={13} />{l}
-    </button>
-  )
-
-  const card = (label, value, color = 'yellow', sub) => <StatCard label={label} value={value} color={color} sub={sub} />
-
-  // ═══════════════ RENDER ════════════════════════════════════════════════════
   return (
-    <div style={{ padding: 24, fontFamily: "'Chakra Petch',sans-serif", color: C.gray, minHeight: '100vh' }}>
-      {toast.visible && (
-        <div style={{ position: 'fixed', top: 20, right: 20, background: toast.type === 'error' ? C.red : C.green, color: '#fff', padding: '12px 20px', borderRadius: 10, zIndex: 9999, fontWeight: 700, boxShadow: '0 4px 20px rgba(0,0,0,.4)' }}>{toast.message}</div>
-      )}
+    <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
+      {/* KPI tiles */}
+      <SectionHead color={C.teal} label="KLJUČNI POKAZATELJI"/>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:14 }}>
+        <Tile label="Prihod" value={EUR(kpi.prihod)} color={C.green}/>
+        <Tile label="Bruto dobit" value={EUR(kpi.dobit)} color={kpi.dobit>=0?C.teal:C.red} warn={kpi.dobit<0}/>
+        <Tile label="Avg. marža" value={PCT(kpi.avgMarza)} color={kpi.avgMarza>=20?C.green:kpi.avgMarza>=10?C.orange:C.red} warn={kpi.avgMarza<10}/>
+        <Tile label="Varijanca bud." value={EUR(kpi.varijanca)} sub={`Plan: ${EUR(kpi.totalPlan)}`} color={kpi.varijanca>=0?C.green:C.red} warn={kpi.varijanca<0}/>
+      </div>
 
-      {/* ── HEADER ── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <div>
-          <h1 style={{ color: C.accent, margin: 0, fontSize: 24, letterSpacing: 1 }}>💰 SALES MODULE</h1>
-          <div style={{ color: C.muted, fontSize: 12, marginTop: 2 }}>Deer MES · Upravljanje prodajom</div>
+      {/* Charts row */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
+        {/* Trend line chart */}
+        <div style={S.card}>
+          <SectionHead color={C.accent} label={`TREND PRIHODA / TROŠKA / DOBITI — ${godina}`}/>
+          <LineChart data={trend} keys={['prihod','trosak','dobit']} colors={[C.green,C.red,C.teal]}/>
+          <div style={{ display:'flex', gap:16, marginTop:10, flexWrap:'wrap' }}>
+            <Legend items={[{label:'Prihod',color:C.green},{label:'Trošak',color:C.red},{label:'Dobit',color:C.teal}]}/>
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <Btn onClick={load} color={C.surface3} sm><RefreshCw size={14} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} /></Btn>
-          {tab !== 'dashboard' && (
-            <Btn onClick={() => { setForm({}); setPositions([]); setModal(`add-${tab === 'rfqs' ? 'rfq' : tab === 'orders' ? 'order' : tab === 'partners' ? 'partner' : 'invoice'}`) }}>
-              <Plus size={14} /> Novi {tab === 'rfqs' ? 'Upit' : tab === 'orders' ? 'Narudžbu' : tab === 'partners' ? 'Partnera' : 'Fakturu'}
-            </Btn>
-          )}
+
+        {/* Budžet bar chart */}
+        <div style={S.card}>
+          <SectionHead color={C.blue} label="BUDŽET VS. STVARNI PO KATEGORIJI"/>
+          <BarChart data={budzetBars} keys={['Plan','Stvarni']} colors={[C.blue,C.teal]}/>
+          <div style={{ display:'flex', gap:16, marginTop:10 }}>
+            <Legend items={[{label:'Plan',color:C.blue},{label:'Stvarni',color:C.teal}]}/>
+          </div>
         </div>
       </div>
 
-      {/* ── KPI STATS ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 10, marginBottom: 20 }}>
-        {card('Aktivni upiti', data.stats.rfq?.u_obradi || 0, 'yellow')}
-        {card('Ponude poslane', data.stats.rfq?.ponuda_poslana || 0, 'teal')}
-        {card('Narudžbe u izradi', data.stats.order?.u_izradi || 0, 'orange')}
-        {card('Kasni isporuka', data.stats.order?.kasni || 0, 'red')}
-        {card('Neplaćeno', data.invStats?.pending_count || 0, 'orange', fmt(data.invStats?.pending_amount))}
-        {card('Prihod ukupno', '', 'green', fmt(data.invStats?.total))}
-      </div>
-
-      {/* ── TABS ── */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
-        {TAB('dashboard', 'Dashboard', TrendingUp)}
-        {TAB('rfqs', 'Upiti (RFQ)', FileSearch)}
-        {TAB('orders', 'Narudžbe', ShoppingCart)}
-        {TAB('partners', 'Partneri', Building2)}
-        {TAB('invoices', 'Fakture', Receipt)}
-      </div>
-
-      {/* ══════════════════════════════════════════════════════════════════
-          DASHBOARD TAB
-      ══════════════════════════════════════════════════════════════════ */}
-      {tab === 'dashboard' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-          {/* Revenue Chart */}
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 20, gridColumn: '1 / -1' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <div style={{ color: C.accent, fontWeight: 700, fontSize: 14 }}>📈 PRIHODI PO MJESECIMA</div>
-              <div style={{ color: C.muted, fontSize: 12 }}>zadnjih 12 mj.</div>
-            </div>
-            <RevenueChart data={data.revenue} />
-          </div>
-
-          {/* Invoice Summary */}
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 20 }}>
-            <div style={{ color: C.accent, fontWeight: 700, fontSize: 14, marginBottom: 14 }}>💳 FAKTURE — SAŽETAK</div>
-            <div style={{ display: 'grid', gap: 10 }}>
-              {[
-                { label: 'Ukupno fakturirano', value: fmt(data.invStats?.total), color: C.gray },
-                { label: 'Plaćeno', value: fmt(data.invStats?.paid), color: C.green },
-                { label: 'Neplaćeno', value: fmt(data.invStats?.pending_amount), color: C.orange },
-                { label: 'Kasni plaćanje', value: fmt(data.invStats?.overdue_amount), color: C.red },
-              ].map(row => (
-                <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: `1px solid ${C.border}33` }}>
-                  <span style={{ color: C.muted, fontSize: 12 }}>{row.label}</span>
-                  <span style={{ color: row.color, fontWeight: 700, fontSize: 13 }}>{row.value}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Activity Feed */}
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 20 }}>
-            <div style={{ color: C.accent, fontWeight: 700, fontSize: 14, marginBottom: 14 }}>🕐 NEDAVNE AKTIVNOSTI</div>
-            <ActivityFeed activities={data.activities} />
-          </div>
-
-          {/* Top Partners */}
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 20 }}>
-            <div style={{ color: C.accent, fontWeight: 700, fontSize: 14, marginBottom: 14 }}>🏆 TOP PARTNERI</div>
-            {data.partners.filter(p => p.total_revenue > 0).sort((a, b) => b.total_revenue - a.total_revenue).slice(0, 6).map((p, i) => (
-              <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: `1px solid ${C.border}33` }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ color: C.muted, fontSize: 11, width: 16 }}>#{i + 1}</span>
-                  <div>
-                    <div style={{ color: C.gray, fontSize: 13, fontWeight: 600 }}>{p.name}</div>
-                    <div style={{ color: C.muted, fontSize: 11 }}>{p.order_count} narudžbi</div>
-                  </div>
-                </div>
-                <span style={{ color: C.accent, fontWeight: 700, fontSize: 12 }}>{fmt(p.total_revenue)}</span>
-              </div>
-            ))}
-            {data.partners.filter(p => p.total_revenue > 0).length === 0 && <div style={{ color: C.muted, fontSize: 12, textAlign: 'center', padding: 16 }}>Nema podataka</div>}
-          </div>
-
-          {/* Overdue Orders */}
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 20, gridColumn: '1 / -1' }}>
-            <div style={{ color: C.red, fontWeight: 700, fontSize: 14, marginBottom: 14 }}>⚠️ PREKORAČENI ROKOVI</div>
-            {data.orders.filter(o => isOverdue(o.delivery_date) && !['isporučena', 'otkazana'].includes(o.status)).length === 0
-              ? <div style={{ color: C.green, fontSize: 13 }}>✓ Nema prekoračenih rokova!</div>
-              : data.orders.filter(o => isOverdue(o.delivery_date) && !['isporučena', 'otkazana'].includes(o.status)).map(o => (
-                <div key={o.id} style={{ display: 'flex', gap: 16, alignItems: 'center', padding: '8px 0', borderBottom: `1px solid ${C.border}33` }}>
-                  <AlertTriangle size={14} style={{ color: C.red, flexShrink: 0 }} />
-                  <div style={{ flex: 1 }}>
-                    <span style={{ color: C.accent, fontWeight: 700 }}>{o.internal_id}</span>
-                    <span style={{ color: C.muted, fontSize: 12, marginLeft: 8 }}>{o.partner_name}</span>
-                  </div>
-                  <span style={{ color: C.red, fontSize: 12 }}>Rok: {fmtDate(o.delivery_date)}</span>
-                  <Pill s={o.status} />
-                </div>
-              ))
-            }
+      {/* Strojni sat donut + summary table */}
+      {strojSegments.length > 0 && (
+        <div style={S.card}>
+          <SectionHead color={C.orange} label="TROŠAK/SAT PO STROJU (€/h)"/>
+          <div style={{ display:'flex', alignItems:'center', gap:32 }}>
+            <DonutChart segments={strojSegments} size={130}/>
+            <Legend items={strojSegments.map(s=>({ label:s.label, value:s.value, color:s.color }))}/>
           </div>
         </div>
       )}
+    </div>
+  )
+}
 
-      {/* ══════════════════════════════════════════════════════════════════
-          RFQs TAB
-      ══════════════════════════════════════════════════════════════════ */}
-      {tab === 'rfqs' && (
-        <>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
-            <SearchBar value={search} onChange={setSearch} placeholder="Pretraži upite..." />
-            <Sel value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ minWidth: 150 }}>
-              <option value="">Svi statusi</option>
-              {['novo', 'u_obradi', 'ponuda_poslana', 'narudžba', 'odbijen'].map(s => <option key={s} value={s}>{s}</option>)}
-            </Sel>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {filterItems(data.rfqs).map(r => (
-              <div key={r.id} style={{ background: C.surface, border: `1px solid ${isOverdue(r.deadline) && r.status !== 'narudžba' ? C.red + '66' : C.border}`, borderRadius: 12, overflow: 'hidden' }}>
-                <div style={{ padding: '12px 16px', display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr auto', gap: 10, alignItems: 'center', cursor: 'pointer' }} onClick={() => setExpanded(p => ({ ...p, [r.id]: !p[r.id] }))}>
-                  <div>
-                    <span style={{ color: C.accent, fontWeight: 700, fontSize: 14 }}>{r.internal_id}</span>
-                    <span style={{ color: C.muted, fontSize: 12, marginLeft: 8 }}>{r.partner_name || '—'}</span>
-                    {r.customer_rfq_id && <div style={{ color: C.muted, fontSize: 11 }}>Ref: {r.customer_rfq_id}</div>}
-                  </div>
-                  <div style={{ fontSize: 12 }}>
-                    <div style={{ color: C.muted }}>Rok odgovora</div>
-                    <div style={{ color: isOverdue(r.deadline) && r.status !== 'narudžba' ? C.red : C.gray, fontWeight: 600 }}>{fmtDate(r.deadline)}</div>
-                  </div>
-                  <div style={{ fontSize: 12 }}>
-                    <div style={{ color: C.muted }}>{r.position_count || 0} poz.</div>
-                    <div style={{ color: C.accent, fontWeight: 700 }}>{r.total_value > 0 ? fmt(r.total_value) : '—'}</div>
-                  </div>
-                  <Pill s={r.status} />
-                  <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
-                    {expanded[r.id] ? <ChevronUp size={16} style={{ color: C.muted }} /> : <ChevronDown size={16} style={{ color: C.muted }} />}
-                  </div>
-                </div>
-                {expanded[r.id] && (
-                  <div style={{ borderTop: `1px solid ${C.border}`, padding: '12px 16px', background: C.surface2 }}>
-                    {r.notes && <div style={{ color: C.muted, fontSize: 12, marginBottom: 10 }}>📝 {r.notes}</div>}
-                    <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
-                      <Btn sm color={C.surface3} onClick={() => openView('rfqs', r.id)}><Eye size={12} /> Detalji & pozicije</Btn>
-                      {r.status === 'novo' && <Btn sm color={C.orange + '33'} onClick={() => updateStatus('rfqs', r.id, 'u_obradi')}>▶ U obradi</Btn>}
-                      {r.status === 'u_obradi' && <Btn sm color={C.teal + '33'} onClick={() => updateStatus('rfqs', r.id, 'ponuda_poslana')}>📤 Ponuda poslana</Btn>}
-                      {['u_obradi', 'ponuda_poslana'].includes(r.status) && (
-                        <Btn sm color={C.green + '33'} onClick={() => { setSelected(r); setForm({ delivery_date: r.deadline }); setModal('convert-rfq') }}><ArrowRight size={12} /> Pretvori u narudžbu</Btn>
-                      )}
-                      {!['narudžba', 'odbijen'].includes(r.status) && <Btn sm color={C.red + '22'} onClick={() => updateStatus('rfqs', r.id, 'odbijen')}>✗ Odbijen</Btn>}
-                      <Btn sm danger onClick={() => deleteEntity('rfqs', r.id)}><Trash2 size={12} /></Btn>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-            {filterItems(data.rfqs).length === 0 && <div style={{ color: C.muted, textAlign: 'center', padding: 40 }}>Nema upita {search ? `za "${search}"` : ''}</div>}
-          </div>
-        </>
-      )}
+// ════════════════════════════════════════════════════════════════════════════
+// TAB: BUDŽET
+// ════════════════════════════════════════════════════════════════════════════
+function TabBudzet({ godina }) {
+  const [rows, setRows] = useState([])
+  const [modal, setModal] = useState(null)
+  const [form, setForm] = useState({})
+  const [search, setSearch] = useState('')
+  const [saving, setSaving] = useState(false)
+  const F = (k,v) => setForm(f=>({...f,[k]:v}))
 
-      {/* ══════════════════════════════════════════════════════════════════
-          ORDERS TAB
-      ══════════════════════════════════════════════════════════════════ */}
-      {tab === 'orders' && (
-        <>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
-            <SearchBar value={search} onChange={setSearch} placeholder="Pretraži narudžbe..." />
-            <Sel value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ minWidth: 160 }}>
-              <option value="">Svi statusi</option>
-              {['nova', 'potvrđena', 'u_izradi', 'sprema_za_otpremu', 'isporučena', 'fakturirana', 'otkazana'].map(s => <option key={s} value={s}>{s}</option>)}
-            </Sel>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {filterItems(data.orders).map(o => (
-              <div key={o.id} style={{ background: C.surface, border: `1px solid ${isOverdue(o.delivery_date) && !['isporučena', 'otkazana'].includes(o.status) ? C.red + '66' : C.border}`, borderRadius: 12, overflow: 'hidden' }}>
-                <div style={{ padding: '12px 16px', display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr 1fr auto', gap: 10, alignItems: 'center', cursor: 'pointer' }} onClick={() => setExpanded(p => ({ ...p, ['o' + o.id]: !p['o' + o.id] }))}>
-                  <div>
-                    <span style={{ color: C.accent, fontWeight: 700, fontSize: 14 }}>{o.internal_id}</span>
-                    <div style={{ color: C.muted, fontSize: 12 }}>{o.partner_name || '—'}</div>
-                    {o.customer_order_id && <div style={{ color: C.muted, fontSize: 11 }}>Kupac: {o.customer_order_id}</div>}
-                  </div>
-                  <div style={{ fontSize: 12 }}>
-                    <div style={{ color: C.muted }}>Isporuka</div>
-                    <div style={{ color: isOverdue(o.delivery_date) && !['isporučena', 'otkazana'].includes(o.status) ? C.red : C.gray, fontWeight: 600 }}>{fmtDate(o.delivery_date)}</div>
-                  </div>
-                  <div style={{ fontSize: 12 }}>
-                    <div style={{ color: C.muted }}>{o.position_count || 0} poz.</div>
-                    {o.total_value > 0 && <div style={{ color: C.accent, fontWeight: 700 }}>{fmt(o.total_value)}</div>}
-                  </div>
-                  <Pill s={o.status} />
-                  {isOverdue(o.delivery_date) && !['isporučena', 'otkazana'].includes(o.status) && <AlertTriangle size={14} style={{ color: C.red }} />}
-                  {expanded['o' + o.id] ? <ChevronUp size={16} style={{ color: C.muted }} /> : <ChevronDown size={16} style={{ color: C.muted }} />}
-                </div>
-                {expanded['o' + o.id] && (
-                  <div style={{ borderTop: `1px solid ${C.border}`, padding: '12px 16px', background: C.surface2 }}>
-                    {o.notes && <div style={{ color: C.muted, fontSize: 12, marginBottom: 10 }}>📝 {o.notes}</div>}
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      <Btn sm color={C.surface3} onClick={() => openView('orders', o.id)}><Eye size={12} /> Detalji</Btn>
-                      {o.status === 'nova' && <Btn sm color={C.teal + '33'} onClick={() => updateStatus('orders', o.id, 'potvrđena')}>✓ Potvrdi</Btn>}
-                      {o.status === 'potvrđena' && <Btn sm color={C.orange + '33'} onClick={() => updateStatus('orders', o.id, 'u_izradi')}>▶ U izradi</Btn>}
-                      {o.status === 'u_izradi' && <Btn sm color={C.accent + '33'} onClick={() => updateStatus('orders', o.id, 'sprema_za_otpremu')}>📦 Sprema za otpremu</Btn>}
-                      {o.status === 'sprema_za_otpremu' && <Btn sm color={C.green + '33'} onClick={() => updateStatus('orders', o.id, 'isporučena')}>🚚 Isporučena</Btn>}
-                      {o.status === 'isporučena' && <Btn sm color={C.green + '33'} onClick={() => updateStatus('orders', o.id, 'fakturirana')}>🧾 Fakturirana</Btn>}
-                      <Btn sm color={C.blue + '33'} onClick={() => { setForm({ order_id: o.id }); setModal('add-invoice') }}><Receipt size={12} /> Napravi fakturu</Btn>
-                      <Btn sm danger onClick={() => deleteEntity('orders', o.id)}><Trash2 size={12} /></Btn>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-            {filterItems(data.orders).length === 0 && <div style={{ color: C.muted, textAlign: 'center', padding: 40 }}>Nema narudžbi {search ? `za "${search}"` : ''}</div>}
-          </div>
-        </>
-      )}
+  const load = useCallback(()=>api.get('/kontroling/budzet').then(r=>setRows(r.data)),[])
+  useEffect(()=>{ load() },[load])
 
-      {/* ══════════════════════════════════════════════════════════════════
-          PARTNERS TAB
-      ══════════════════════════════════════════════════════════════════ */}
-      {tab === 'partners' && (
-        <>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-            <SearchBar value={search} onChange={setSearch} placeholder="Pretraži partnere..." />
-            <Sel value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ minWidth: 130 }}>
-              <option value="">Svi tipovi</option>
-              <option value="customer">Kupci</option>
-              <option value="supplier">Dobavljači</option>
-              <option value="both">Oboje</option>
-            </Sel>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(300px,1fr))', gap: 12 }}>
-            {filterItems(data.partners).map(p => (
-              <div key={p.id} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 18 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-                  <div style={{ color: C.accent, fontWeight: 700, fontSize: 15 }}>{p.name}</div>
-                  <span style={{ background: `${C.teal}22`, color: C.teal, borderRadius: 12, padding: '2px 8px', fontSize: 10, fontWeight: 700 }}>{p.type?.toUpperCase()}</span>
-                </div>
-                <div style={{ display: 'grid', gap: 4, fontSize: 12 }}>
-                  {p.oib && <div style={{ color: C.muted }}>OIB: <span style={{ color: C.gray }}>{p.oib}</span></div>}
-                  {p.country && <div style={{ color: C.muted }}>📍 {p.address ? `${p.address}, ` : ''}{p.country}</div>}
-                  {p.contact_email && <div style={{ color: C.muted }}>✉️ <span style={{ color: C.gray }}>{p.contact_email}</span></div>}
-                  {p.contact_phone && <div style={{ color: C.muted }}>📞 <span style={{ color: C.gray }}>{p.contact_phone}</span></div>}
-                  {p.contact_name && <div style={{ color: C.muted }}>👤 <span style={{ color: C.gray }}>{p.contact_name}</span></div>}
-                </div>
-                <Divider />
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ fontSize: 12 }}>
-                    <span style={{ color: C.muted }}>{p.order_count} narudžbi · </span>
-                    <span style={{ color: C.accent, fontWeight: 700 }}>{fmt(p.total_revenue)}</span>
-                  </div>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <Btn sm color={C.surface3} onClick={() => { setSelected(p); setForm({ ...p }); setModal('edit-partner') }}><Edit2 size={12} /></Btn>
-                    <Btn sm danger onClick={() => deleteEntity('partners', p.id)}><Trash2 size={12} /></Btn>
-                  </div>
-                </div>
-                {p.payment_terms && <div style={{ color: C.muted, fontSize: 11, marginTop: 6 }}>⏱ Rok plaćanja: {p.payment_terms} dana</div>}
-              </div>
-            ))}
-            {filterItems(data.partners).length === 0 && <div style={{ color: C.muted, textAlign: 'center', padding: 40, gridColumn: '1/-1' }}>Nema partnera</div>}
-          </div>
-        </>
-      )}
+  const save = async () => {
+    setSaving(true)
+    if (modal==='new') await api.post('/kontroling/budzet',form)
+    else await api.put(`/kontroling/budzet/${form.id}`,form)
+    setSaving(false); setModal(null); load()
+  }
+  const del = async id => { if(confirm('Obrisati?')){ await api.delete(`/kontroling/budzet/${id}`); load() } }
 
-      {/* ══════════════════════════════════════════════════════════════════
-          INVOICES TAB
-      ══════════════════════════════════════════════════════════════════ */}
-      {tab === 'invoices' && (
-        <>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
-            <SearchBar value={search} onChange={setSearch} placeholder="Pretraži fakture..." />
-            <Sel value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ minWidth: 140 }}>
-              <option value="">Svi statusi</option>
-              {['nacrt', 'poslana', 'plaćena', 'odbijena'].map(s => <option key={s} value={s}>{s}</option>)}
-            </Sel>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {filterItems(data.invoices).map(inv => {
-              const overdue = isOverdue(inv.due_date) && inv.status !== 'plaćena'
+  const filtered = rows.filter(r=>!search||(r.kategorija+r.opis).toLowerCase().includes(search.toLowerCase()))
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+      <div style={{ display:'flex', gap:10, alignItems:'center', flexWrap:'wrap' }}>
+        <input placeholder="Pretraži..." value={search} onChange={e=>setSearch(e.target.value)}
+          style={{ ...S.input, width:200, padding:'7px 12px' }}/>
+        <button onClick={()=>exportCSV(filtered.map(r=>[r.godina,r.mjesec,r.kategorija,r.opis,r.iznos_plan,r.iznos_stvarni,(r.iznos_plan-r.iznos_stvarni).toFixed(2)]),['God','Mj','Kat','Opis','Plan','Stvarni','Razlika'],'budzet.csv')}
+          style={S.ghost}><Download size={13}/> CSV</button>
+        <button onClick={()=>{ setForm({godina,mjesec:new Date().getMonth()+1,kategorija:'',iznos_plan:0,iznos_stvarni:0}); setModal('new') }}
+          style={{ ...S.btn(), marginLeft:'auto' }}><Plus size={14}/> Dodaj</button>
+      </div>
+      <div style={{ ...S.card, padding:0, overflow:'hidden' }}>
+        <table style={{ width:'100%', borderCollapse:'collapse' }}>
+          <thead style={{ background:C.surface2 }}>
+            <tr>{['God.','Mj','Kategorija','Opis','Plan (€)','Stvarni (€)','Razlika',''].map(h=><th key={h} style={S.th}>{h}</th>)}</tr>
+          </thead>
+          <tbody>
+            {filtered.length===0 && <tr><td colSpan={8} style={{ ...S.td, textAlign:'center', padding:32, color:C.muted }}>Nema podataka</td></tr>}
+            {filtered.map(r=>{
+              const raz=(r.iznos_plan||0)-(r.iznos_stvarni||0)
               return (
-                <div key={inv.id} style={{ background: C.surface, border: `1px solid ${overdue ? C.red + '66' : C.border}`, borderRadius: 12, padding: '12px 16px', display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr 1fr auto', gap: 10, alignItems: 'center' }}>
-                  <div>
-                    <div style={{ color: C.accent, fontWeight: 700, fontSize: 14 }}>{inv.invoice_number}</div>
-                    <div style={{ color: C.muted, fontSize: 12 }}>{inv.partner_name || '—'}</div>
-                    {inv.order_ref && <div style={{ color: C.muted, fontSize: 11 }}>Narudžba: {inv.order_ref}</div>}
-                  </div>
-                  <div style={{ fontSize: 12 }}>
-                    <div style={{ color: C.muted, fontSize: 11 }}>Bez PDV</div>
-                    <div style={{ color: C.gray }}>{fmt(inv.amount)}</div>
-                  </div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: C.accent }}>{fmt(inv.total_amount)} <span style={{ color: C.muted, fontSize: 10, fontWeight: 400 }}>{inv.currency}</span></div>
-                  <div style={{ fontSize: 12 }}>
-                    <div style={{ color: C.muted, fontSize: 11 }}>Rok plaćanja</div>
-                    <div style={{ color: overdue ? C.red : C.gray, fontWeight: overdue ? 700 : 400 }}>{fmtDate(inv.due_date)}</div>
-                  </div>
-                  <Pill s={inv.status} />
-                  <div style={{ display: 'flex', gap: 5 }}>
-                    {inv.status !== 'plaćena' && <Btn sm color={C.green + '33'} onClick={() => markPaid(inv.id)}><Check size={12} /> Plaćeno</Btn>}
-                    {inv.status === 'nacrt' && <Btn sm color={C.blue + '33'} onClick={() => api.put(`/sales/invoices/${inv.id}`, { status: 'poslana' }).then(load)}>📤 Pošalji</Btn>}
-                    <Btn sm danger onClick={() => deleteEntity('invoices', inv.id)}><Trash2 size={12} /></Btn>
-                  </div>
-                </div>
+                <tr key={r.id} onMouseOver={e=>e.currentTarget.style.background=C.surface2+'88'} onMouseOut={e=>e.currentTarget.style.background='transparent'}>
+                  <td style={S.td}>{r.godina}</td>
+                  <td style={S.td}>{MJ[r.mjesec]}</td>
+                  <td style={S.td}><span style={{ background:C.teal+'22', color:C.teal, borderRadius:6, padding:'2px 8px', fontSize:11, fontWeight:600 }}>{r.kategorija}</span></td>
+                  <td style={{ ...S.td, maxWidth:180, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.opis||'—'}</td>
+                  <td style={{ ...S.td, fontFamily:'monospace' }}>{EUR(r.iznos_plan)}</td>
+                  <td style={{ ...S.td, fontFamily:'monospace' }}>{EUR(r.iznos_stvarni)}</td>
+                  <td style={{ ...S.td, fontFamily:'monospace', fontWeight:700, color:raz>=0?C.green:C.red }}>{raz>=0?'+':''}{EUR(raz)}</td>
+                  <td style={S.td}>
+                    <div style={{ display:'flex', gap:6 }}>
+                      <button onClick={()=>{ setForm({...r}); setModal('edit') }} style={{ background:'none', border:'none', cursor:'pointer', color:C.muted }} onMouseOver={e=>e.currentTarget.style.color=C.accent} onMouseOut={e=>e.currentTarget.style.color=C.muted}><Edit2 size={13}/></button>
+                      <button onClick={()=>del(r.id)} style={{ background:'none', border:'none', cursor:'pointer', color:C.muted }} onMouseOver={e=>e.currentTarget.style.color=C.red} onMouseOut={e=>e.currentTarget.style.color=C.muted}><Trash2 size={13}/></button>
+                    </div>
+                  </td>
+                </tr>
               )
             })}
-            {filterItems(data.invoices).length === 0 && <div style={{ color: C.muted, textAlign: 'center', padding: 40 }}>Nema faktura {search ? `za "${search}"` : ''}</div>}
+          </tbody>
+        </table>
+      </div>
+      {modal && (
+        <Modal title={modal==='new'?'NOVI BUDŽET':'UREDI BUDŽET'} onClose={()=>setModal(null)}>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+            <Field label="Godina"><Inp type="number" value={form.godina} onChange={v=>F('godina',+v)}/></Field>
+            <Field label="Mjesec"><Sel value={form.mjesec} onChange={v=>F('mjesec',+v)} options={MJ.slice(1).map((m,i)=>({value:i+1,label:m}))}/></Field>
           </div>
-        </>
-      )}
-
-      {/* ══════════════════════════════════════════════════════════════════
-          MODALS
-      ══════════════════════════════════════════════════════════════════ */}
-
-      {/* ADD RFQ */}
-      {modal === 'add-rfq' && (
-        <Modal title="📋 Novi upit (RFQ)" onClose={() => setModal(null)} wide>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-            <Sel label="Partner *" {...inp('partner_id')}><option value="">— Odaberi —</option>{data.partners.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</Sel>
-            <Inp label="Kupčev broj upita" {...inp('customer_rfq_id')} />
-            <Inp label="Rok odgovora" type="date" {...inp('deadline')} />
-            <Textarea label="Napomena" {...inp('notes')} style={{ gridColumn: '1 / -1' }} />
+          <Field label="Kategorija"><Sel value={form.kategorija} onChange={v=>F('kategorija',v)} options={BKAT}/></Field>
+          <Field label="Opis"><Inp value={form.opis} onChange={v=>F('opis',v)}/></Field>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+            <Field label="Plan (€)"><Inp type="number" value={form.iznos_plan} onChange={v=>F('iznos_plan',+v)}/></Field>
+            <Field label="Stvarni (€)"><Inp type="number" value={form.iznos_stvarni} onChange={v=>F('iznos_stvarni',+v)}/></Field>
           </div>
-          <Divider />
-          <div style={{ color: C.teal, fontWeight: 700, fontSize: 12, letterSpacing: 1, marginBottom: 8 }}>POZICIJE ({positions.length})</div>
-          {positions.length > 0 && <PositionsTable positions={positions} editable onDelete={id => setPositions(p => p.filter((_, i) => i !== id))} />}
-          <AddPositionForm onAdd={p => setPositions(prev => [...prev, { ...p, id: prev.length, position_no: prev.length + 1, total_price: (parseFloat(p.quantity) || 1) * (parseFloat(p.unit_price) || 0) }])} />
-          <Divider />
-          <Btn onClick={handleSubmit}><Check size={14} /> Spremi upit</Btn>
+          <Field label="Napomena"><Inp value={form.napomena} onChange={v=>F('napomena',v)}/></Field>
+          <SaveRow onSave={save} onClose={()=>setModal(null)} loading={saving}/>
         </Modal>
       )}
+    </div>
+  )
+}
 
-      {/* ADD ORDER */}
-      {modal === 'add-order' && (
-        <Modal title="📦 Nova narudžba" onClose={() => setModal(null)} wide>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-            <Sel label="Partner *" {...inp('partner_id')}><option value="">— Odaberi —</option>{data.partners.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</Sel>
-            <Inp label="Kupčev broj narudžbe" {...inp('customer_order_id')} />
-            <Inp label="Rok isporuke" type="date" {...inp('delivery_date')} />
-            <Textarea label="Napomena" {...inp('notes')} style={{ gridColumn: '1 / -1' }} />
+// ════════════════════════════════════════════════════════════════════════════
+// TAB: TROŠKOVI STROJA/SAT
+// ════════════════════════════════════════════════════════════════════════════
+function TabStrojni() {
+  const [rows, setRows] = useState([])
+  const [machines, setMachines] = useState([])
+  const [modal, setModal] = useState(null)
+  const [form, setForm] = useState({})
+  const [saving, setSaving] = useState(false)
+  const F = (k,v) => setForm(f=>({...f,[k]:v}))
+
+  const load = useCallback(async()=>{ const [r,m]=await Promise.all([api.get('/kontroling/strojni-troskovi'),api.get('/machines')]); setRows(r.data); setMachines(m.data) },[])
+  useEffect(()=>{ load() },[load])
+
+  const ukupno = f => (+f.am||0)+(+f.el||0)+(+f.od||0)+(+f.os||0)
+  const save = async()=>{
+    setSaving(true)
+    const p={ machine_id:form.machine_id, 'trošak_amortizacija':+form.am||0, 'trošak_struja':+form.el||0, 'trošak_odrzavanje':+form.od||0, 'trošak_ostalo':+form.os||0, vrijedi_od:form.vrijedi_od, napomena:form.napomena }
+    if(modal==='new') await api.post('/kontroling/strojni-troskovi',p)
+    else await api.put(`/kontroling/strojni-troskovi/${form.id}`,p)
+    setSaving(false); setModal(null); load()
+  }
+  const del = async id=>{ if(confirm('Obrisati?')){ await api.delete(`/kontroling/strojni-troskovi/${id}`); load() } }
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+      <div style={{ display:'flex', gap:10 }}>
+        <button onClick={()=>exportCSV(rows.map(r=>[r.stroj_naziv,r.trosak_amortizacija,r.trosak_struja,r.trosak_odrzavanje,r.trosak_ostalo,r.trosak_ukupno_sat,r.vrijedi_od]),['Stroj','Amort','Struja','Odrzav','Ostalo','Ukupno/h','Od'],'strojni.csv')} style={S.ghost}><Download size={13}/> CSV</button>
+        <button onClick={()=>{ setForm({vrijedi_od:new Date().toISOString().slice(0,10)}); setModal('new') }} style={{ ...S.btn(), marginLeft:'auto' }}><Plus size={14}/> Dodaj</button>
+      </div>
+      <div style={{ ...S.card, padding:0, overflow:'hidden' }}>
+        <table style={{ width:'100%', borderCollapse:'collapse' }}>
+          <thead style={{ background:C.surface2 }}>
+            <tr>{['Stroj','Amortizacija','Struja','Održavanje','Ostalo','Ukupno/sat','Vrijedi od',''].map(h=><th key={h} style={S.th}>{h}</th>)}</tr>
+          </thead>
+          <tbody>
+            {rows.length===0 && <tr><td colSpan={8} style={{ ...S.td, textAlign:'center', padding:32, color:C.muted }}>Nema podataka</td></tr>}
+            {rows.map(r=>(
+              <tr key={r.id} onMouseOver={e=>e.currentTarget.style.background=C.surface2+'88'} onMouseOut={e=>e.currentTarget.style.background='transparent'}>
+                <td style={{ ...S.td, fontWeight:600, color:'#E8F2F0' }}>{r.stroj_naziv||'—'}</td>
+                <td style={{ ...S.td, fontFamily:'monospace' }}>{EUR(r.trosak_amortizacija)}</td>
+                <td style={{ ...S.td, fontFamily:'monospace' }}>{EUR(r.trosak_struja)}</td>
+                <td style={{ ...S.td, fontFamily:'monospace' }}>{EUR(r.trosak_odrzavanje)}</td>
+                <td style={{ ...S.td, fontFamily:'monospace' }}>{EUR(r.trosak_ostalo)}</td>
+                <td style={{ ...S.td, fontFamily:'monospace', fontWeight:700, color:C.teal }}>{EUR(r.trosak_ukupno_sat)}/h</td>
+                <td style={{ ...S.td, fontSize:11, color:C.muted }}>{r.vrijedi_od}</td>
+                <td style={S.td}>
+                  <div style={{ display:'flex', gap:6 }}>
+                    <button onClick={()=>{ setForm({...r,am:r.trosak_amortizacija,el:r.trosak_struja,od:r.trosak_odrzavanje,os:r.trosak_ostalo}); setModal('edit') }} style={{ background:'none', border:'none', cursor:'pointer', color:C.muted }} onMouseOver={e=>e.currentTarget.style.color=C.accent} onMouseOut={e=>e.currentTarget.style.color=C.muted}><Edit2 size={13}/></button>
+                    <button onClick={()=>del(r.id)} style={{ background:'none', border:'none', cursor:'pointer', color:C.muted }} onMouseOver={e=>e.currentTarget.style.color=C.red} onMouseOut={e=>e.currentTarget.style.color=C.muted}><Trash2 size={13}/></button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {modal && (
+        <Modal title={modal==='new'?'NOVI TROŠAK STROJA/SAT':'UREDI TROŠAK'} onClose={()=>setModal(null)}>
+          <Field label="Stroj"><Sel value={form.machine_id} onChange={v=>F('machine_id',+v)} options={machines.map(m=>({value:m.id,label:m.name}))}/></Field>
+          <Field label="Vrijedi od"><Inp type="date" value={form.vrijedi_od} onChange={v=>F('vrijedi_od',v)}/></Field>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+            <Field label="Amortizacija (€/h)"><Inp type="number" value={form.am} onChange={v=>F('am',v)}/></Field>
+            <Field label="Struja (€/h)"><Inp type="number" value={form.el} onChange={v=>F('el',v)}/></Field>
+            <Field label="Održavanje (€/h)"><Inp type="number" value={form.od} onChange={v=>F('od',v)}/></Field>
+            <Field label="Ostalo (€/h)"><Inp type="number" value={form.os} onChange={v=>F('os',v)}/></Field>
           </div>
-          <Divider />
-          <div style={{ color: C.teal, fontWeight: 700, fontSize: 12, letterSpacing: 1, marginBottom: 8 }}>POZICIJE ({positions.length})</div>
-          {positions.length > 0 && <PositionsTable positions={positions} editable onDelete={id => setPositions(p => p.filter((_, i) => i !== id))} />}
-          <AddPositionForm onAdd={p => setPositions(prev => [...prev, { ...p, id: prev.length, position_no: prev.length + 1, total_price: (parseFloat(p.quantity) || 1) * (parseFloat(p.unit_price) || 0) }])} />
-          <Divider />
-          <Btn onClick={handleSubmit}><Check size={14} /> Spremi narudžbu</Btn>
+          <div style={{ background:C.surface3, borderRadius:8, padding:'10px 14px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+            <span style={{ fontSize:11, color:C.muted }}>UKUPNO</span>
+            <span style={{ fontSize:18, fontWeight:700, color:C.accent, fontFamily:"'Chakra Petch',sans-serif" }}>{EUR(ukupno(form))}/h</span>
+          </div>
+          <Field label="Napomena"><Inp value={form.napomena} onChange={v=>F('napomena',v)}/></Field>
+          <SaveRow onSave={save} onClose={()=>setModal(null)} loading={saving}/>
         </Modal>
       )}
+    </div>
+  )
+}
 
-      {/* CONVERT RFQ → ORDER */}
-      {modal === 'convert-rfq' && (
-        <Modal title={`🔄 Pretvori RFQ → Narudžba (${selected?.internal_id})`} onClose={() => setModal(null)}>
-          <div style={{ color: C.muted, fontSize: 12, marginBottom: 16 }}>Partner: <span style={{ color: C.gray }}>{selected?.partner_name}</span></div>
-          <div style={{ display: 'grid', gap: 14 }}>
-            <Inp label="Kupčev broj narudžbe" {...inp('customer_order_id')} />
-            <Inp label="Rok isporuke" type="date" {...inp('delivery_date')} />
-            <Textarea label="Napomena" {...inp('notes')} />
-          </div>
-          <Divider />
-          <Btn onClick={handleSubmit} color={C.green}><ArrowRight size={14} /> Kreiraj narudžbu</Btn>
-        </Modal>
-      )}
+// ════════════════════════════════════════════════════════════════════════════
+// TAB: TROŠKOVI NALOGA
+// ════════════════════════════════════════════════════════════════════════════
+function TabNalog() {
+  const [rows, setRows] = useState([])
+  const [workOrders, setWorkOrders] = useState([])
+  const [modal, setModal] = useState(null)
+  const [form, setForm] = useState({})
+  const [search, setSearch] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [open, setOpen] = useState({})
+  const F = (k,v) => setForm(f=>({...f,[k]:v}))
 
-      {/* ADD / EDIT PARTNER */}
-      {(modal === 'add-partner' || modal === 'edit-partner') && (
-        <Modal title={modal === 'edit-partner' ? `✏️ Uredi partnera` : '🏢 Novi partner'} onClose={() => setModal(null)}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-            <Inp label="Naziv *" {...inp('name')} style={{ gridColumn: '1 / -1' }} />
-            <Sel label="Tip" {...inp('type')}><option value="customer">Kupac</option><option value="supplier">Dobavljač</option><option value="both">Oboje</option></Sel>
-            <Inp label="OIB" {...inp('oib')} />
-            <Inp label="Zemlja" {...inp('country')} placeholder="Hrvatska" />
-            <Inp label="Adresa" {...inp('address')} style={{ gridColumn: '1 / -1' }} />
-            <Inp label="Kontakt osoba" {...inp('contact_name')} />
-            <Inp label="Email" type="email" {...inp('contact_email')} />
-            <Inp label="Telefon" {...inp('contact_phone')} />
-            <Inp label="Rok plaćanja (dani)" type="number" {...inp('payment_terms')} placeholder="30" />
-          </div>
-          <Divider />
-          <Btn onClick={handleSubmit}><Check size={14} /> {modal === 'edit-partner' ? 'Spremi promjene' : 'Dodaj partnera'}</Btn>
-        </Modal>
-      )}
+  const load = useCallback(async()=>{ const [r,w]=await Promise.all([api.get('/kontroling/nalog-troskovi'),api.get('/work-orders')]); setRows(r.data); setWorkOrders(w.data) },[])
+  useEffect(()=>{ load() },[load])
 
-      {/* ADD INVOICE */}
-      {modal === 'add-invoice' && (
-        <Modal title="🧾 Nova faktura" onClose={() => setModal(null)}>
-          <div style={{ display: 'grid', gap: 14 }}>
-            <Sel label="Narudžba" {...inp('order_id')}><option value="">— Bez narudžbe —</option>{data.orders.map(o => <option key={o.id} value={o.id}>{o.internal_id} – {o.partner_name}</option>)}</Sel>
-            {!form.order_id && <Sel label="Partner" {...inp('partner_id')}><option value="">— Odaberi —</option>{data.partners.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</Sel>}
-            <Inp label="Iznos bez PDV (EUR) *" type="number" {...inp('amount')} />
-            <Inp label="PDV %" type="number" {...inp('vat_rate')} placeholder="25" />
-            {form.amount && (
-              <div style={{ background: C.surface3, borderRadius: 8, padding: 12, fontSize: 13 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: C.muted }}>Bez PDV:</span><span style={{ color: C.gray }}>{fmt(form.amount)}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: C.muted }}>PDV ({form.vat_rate || 25}%):</span><span style={{ color: C.gray }}>{fmt(parseFloat(form.amount) * (parseFloat(form.vat_rate || 25) / 100))}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, paddingTop: 6, borderTop: `1px solid ${C.border}` }}>
-                  <span style={{ color: C.muted, fontWeight: 700 }}>UKUPNO:</span><span style={{ color: C.accent, fontWeight: 700, fontSize: 15 }}>{fmt(parseFloat(form.amount) * (1 + parseFloat(form.vat_rate || 25) / 100))}</span>
-                </div>
-              </div>
-            )}
-            <Inp label="Rok plaćanja" type="date" {...inp('due_date')} />
-            <Textarea label="Napomena" {...inp('notes')} />
-          </div>
-          <Divider />
-          <Btn onClick={handleSubmit}><Check size={14} /> Kreiraj fakturu</Btn>
-        </Modal>
-      )}
+  const save = async()=>{
+    setSaving(true)
+    const p={...form,kolicina:+form.kolicina||1,jedinicna_cijena:+form.jedinicna_cijena||0}
+    if(modal==='new') await api.post('/kontroling/nalog-troskovi',p)
+    else await api.put(`/kontroling/nalog-troskovi/${form.id}`,p)
+    setSaving(false); setModal(null); load()
+  }
+  const del = async id=>{ if(confirm('Obrisati?')){ await api.delete(`/kontroling/nalog-troskovi/${id}`); load() } }
 
-      {/* VIEW RFQ DETAIL */}
-      {modal === 'view-rfqs' && selected && (
-        <Modal title={`📋 ${selected.internal_id}`} onClose={() => setModal(null)} wide>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 16 }}>
-            <div><div style={{ color: C.muted, fontSize: 11 }}>PARTNER</div><div style={{ color: C.gray, fontWeight: 600 }}>{selected.partner_name || '—'}</div></div>
-            <div><div style={{ color: C.muted, fontSize: 11 }}>KUPČEV REF</div><div style={{ color: C.gray }}>{selected.customer_rfq_id || '—'}</div></div>
-            <div><div style={{ color: C.muted, fontSize: 11 }}>ROK</div><div style={{ color: isOverdue(selected.deadline) ? C.red : C.gray }}>{fmtDate(selected.deadline)}</div></div>
-            <div><div style={{ color: C.muted, fontSize: 11 }}>STATUS</div><Pill s={selected.status} /></div>
-            <div><div style={{ color: C.muted, fontSize: 11 }}>KREIRAN</div><div style={{ color: C.gray, fontSize: 12 }}>{fmtDate(selected.created_at)}</div></div>
-          </div>
-          {selected.notes && <div style={{ color: C.muted, fontSize: 12, marginBottom: 12, background: C.surface3, borderRadius: 8, padding: 10 }}>📝 {selected.notes}</div>}
-          <Divider />
-          <div style={{ color: C.teal, fontWeight: 700, fontSize: 12, letterSpacing: 1, marginBottom: 8 }}>POZICIJE ({selected.positions?.length || 0})</div>
-          {selected.positions?.length > 0
-            ? <PositionsTable positions={selected.positions} editable={false} onDelete={() => {}} />
-            : <div style={{ color: C.muted, fontSize: 12, textAlign: 'center', padding: 20 }}>Nema pozicija</div>
-          }
-        </Modal>
-      )}
+  const filtered = rows.filter(r=>!search||(r.nalog_broj||'').toLowerCase().includes(search.toLowerCase())||(r.part_name||'').toLowerCase().includes(search.toLowerCase()))
 
-      {/* VIEW ORDER DETAIL */}
-      {modal === 'view-orders' && selected && (
-        <Modal title={`📦 ${selected.internal_id}`} onClose={() => setModal(null)} wide>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 16 }}>
-            <div><div style={{ color: C.muted, fontSize: 11 }}>PARTNER</div><div style={{ color: C.gray, fontWeight: 600 }}>{selected.partner_name || '—'}</div></div>
-            <div><div style={{ color: C.muted, fontSize: 11 }}>KUPAC REF</div><div style={{ color: C.gray }}>{selected.customer_order_id || '—'}</div></div>
-            <div><div style={{ color: C.muted, fontSize: 11 }}>ROK ISPORUKE</div><div style={{ color: isOverdue(selected.delivery_date) ? C.red : C.gray }}>{fmtDate(selected.delivery_date)}</div></div>
-            <div><div style={{ color: C.muted, fontSize: 11 }}>STATUS</div><Pill s={selected.status} /></div>
-            <div><div style={{ color: C.muted, fontSize: 11 }}>VRIJEDNOST</div><div style={{ color: C.accent, fontWeight: 700 }}>{fmt(selected.total_value)}</div></div>
-            <div><div style={{ color: C.muted, fontSize: 11 }}>EMAIL</div><div style={{ color: C.gray, fontSize: 12 }}>{selected.contact_email || '—'}</div></div>
+  // Group by work order
+  const groups = {}
+  filtered.forEach(r=>{ const k=r.nalog_broj||r.work_order_id; if(!groups[k]) groups[k]={nalog:r.nalog_broj,part:r.part_name,items:[],total:0}; groups[k].items.push(r); groups[k].total+=r.ukupno||0 })
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+      <div style={{ display:'flex', gap:10, alignItems:'center' }}>
+        <input placeholder="Pretraži nalog, dio..." value={search} onChange={e=>setSearch(e.target.value)} style={{ ...S.input, width:220, padding:'7px 12px' }}/>
+        <button onClick={()=>exportCSV(filtered.map(r=>[r.nalog_broj,r.part_name,r.kategorija,r.opis,r.kolicina,r.jedinicna_cijena,r.ukupno]),['Nalog','Dio','Kat','Opis','Kol','JedCij','Ukupno'],'nalog_troskovi.csv')} style={S.ghost}><Download size={13}/> CSV</button>
+        <button onClick={()=>{ setForm({kolicina:1,jedinicna_cijena:0}); setModal('new') }} style={{ ...S.btn(), marginLeft:'auto' }}><Plus size={14}/> Dodaj</button>
+      </div>
+      {Object.values(groups).length===0 && <div style={{ ...S.card, textAlign:'center', padding:40, color:C.muted }}>Nema podataka</div>}
+      {Object.values(groups).map(g=>(
+        <div key={g.nalog} style={{ ...S.card, padding:0, overflow:'hidden' }}>
+          <div onClick={()=>setOpen(o=>({...o,[g.nalog]:!o[g.nalog]}))}
+            style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 16px', cursor:'pointer', background:C.surface2+'66', borderBottom:`1px solid ${C.border}44` }}>
+            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+              <FileText size={14} color={C.accent}/>
+              <span style={{ fontWeight:700, color:'#E8F2F0', fontSize:13 }}>{g.nalog}</span>
+              <span style={{ color:C.muted, fontSize:12 }}>{g.part}</span>
+              <span style={{ fontSize:10, color:C.muted2 }}>{g.items.length} stavki</span>
+            </div>
+            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+              <span style={{ fontWeight:700, color:C.teal, fontFamily:"'Chakra Petch',sans-serif" }}>{EUR(g.total)}</span>
+              {open[g.nalog]?<ChevronUp size={14} color={C.muted}/>:<ChevronDown size={14} color={C.muted}/>}
+            </div>
           </div>
-          {selected.notes && <div style={{ color: C.muted, fontSize: 12, marginBottom: 12, background: C.surface3, borderRadius: 8, padding: 10 }}>📝 {selected.notes}</div>}
-          <Divider />
-          <div style={{ color: C.teal, fontWeight: 700, fontSize: 12, letterSpacing: 1, marginBottom: 8 }}>POZICIJE ({selected.positions?.length || 0})</div>
-          {selected.positions?.length > 0
-            ? <PositionsTable positions={selected.positions} editable={false} onDelete={() => {}} />
-            : <div style={{ color: C.muted, fontSize: 12, textAlign: 'center', padding: 20 }}>Nema pozicija</div>
-          }
-          {selected.invoices?.length > 0 && (
-            <>
-              <Divider />
-              <div style={{ color: C.accent, fontWeight: 700, fontSize: 12, letterSpacing: 1, marginBottom: 8 }}>FAKTURE ({selected.invoices.length})</div>
-              {selected.invoices.map(inv => (
-                <div key={inv.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: `1px solid ${C.border}33`, fontSize: 12 }}>
-                  <span style={{ color: C.accent }}>{inv.invoice_number}</span>
-                  <span style={{ color: C.gray }}>{fmt(inv.total_amount)}</span>
-                  <Pill s={inv.status} />
-                </div>
-              ))}
-            </>
+          {open[g.nalog] && (
+            <table style={{ width:'100%', borderCollapse:'collapse' }}>
+              <thead style={{ background:C.surface3+'44' }}>
+                <tr>{['Kategorija','Opis','Kol','Jed. cijena','Ukupno',''].map(h=><th key={h} style={{ ...S.th, fontSize:9 }}>{h}</th>)}</tr>
+              </thead>
+              <tbody>
+                {g.items.map(r=>(
+                  <tr key={r.id} onMouseOver={e=>e.currentTarget.style.background=C.surface2+'44'} onMouseOut={e=>e.currentTarget.style.background='transparent'}>
+                    <td style={S.td}><span style={{ background:C.surface3, color:C.muted, borderRadius:4, padding:'1px 7px', fontSize:11 }}>{r.kategorija}</span></td>
+                    <td style={S.td}>{r.opis||'—'}</td>
+                    <td style={S.td}>{r.kolicina}</td>
+                    <td style={{ ...S.td, fontFamily:'monospace' }}>{EUR(r.jedinicna_cijena)}</td>
+                    <td style={{ ...S.td, fontFamily:'monospace', fontWeight:700, color:'#E8F2F0' }}>{EUR(r.ukupno)}</td>
+                    <td style={S.td}>
+                      <div style={{ display:'flex', gap:5 }}>
+                        <button onClick={()=>{ setForm(r); setModal('edit') }} style={{ background:'none', border:'none', cursor:'pointer', color:C.muted }} onMouseOver={e=>e.currentTarget.style.color=C.accent} onMouseOut={e=>e.currentTarget.style.color=C.muted}><Edit2 size={12}/></button>
+                        <button onClick={()=>del(r.id)} style={{ background:'none', border:'none', cursor:'pointer', color:C.muted }} onMouseOver={e=>e.currentTarget.style.color=C.red} onMouseOut={e=>e.currentTarget.style.color=C.muted}><Trash2 size={12}/></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
+        </div>
+      ))}
+      {modal && (
+        <Modal title={modal==='new'?'NOVI TROŠAK NALOGA':'UREDI TROŠAK'} onClose={()=>setModal(null)}>
+          <Field label="Radni nalog"><Sel value={form.work_order_id} onChange={v=>F('work_order_id',+v)} options={workOrders.map(w=>({value:w.id,label:`${w.work_order_id} — ${w.part_name}`}))}/></Field>
+          <Field label="Kategorija"><Sel value={form.kategorija} onChange={v=>F('kategorija',v)} options={NKAT}/></Field>
+          <Field label="Opis"><Inp value={form.opis} onChange={v=>F('opis',v)}/></Field>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+            <Field label="Količina"><Inp type="number" value={form.kolicina} onChange={v=>F('kolicina',v)}/></Field>
+            <Field label="Jed. cijena (€)"><Inp type="number" value={form.jedinicna_cijena} onChange={v=>F('jedinicna_cijena',v)}/></Field>
+          </div>
+          <div style={{ background:C.surface3, borderRadius:8, padding:'10px 14px', display:'flex', justifyContent:'space-between' }}>
+            <span style={{ fontSize:11, color:C.muted }}>UKUPNO</span>
+            <span style={{ fontSize:16, fontWeight:700, color:C.accent, fontFamily:"'Chakra Petch',sans-serif" }}>{EUR((+form.kolicina||1)*(+form.jedinicna_cijena||0))}</span>
+          </div>
+          <Field label="Napomena"><Inp value={form.napomena} onChange={v=>F('napomena',v)}/></Field>
+          <SaveRow onSave={save} onClose={()=>setModal(null)} loading={saving}/>
         </Modal>
       )}
+    </div>
+  )
+}
 
-      <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+// ════════════════════════════════════════════════════════════════════════════
+// TAB: PROFITABILNOST
+// ════════════════════════════════════════════════════════════════════════════
+function TabProfit({ godina }) {
+  const [rows, setRows] = useState([])
+  const [partners, setPartners] = useState([])
+  const [modal, setModal] = useState(null)
+  const [form, setForm] = useState({})
+  const [search, setSearch] = useState('')
+  const [saving, setSaving] = useState(false)
+  const F = (k,v) => setForm(f=>({...f,[k]:v}))
+
+  const load = useCallback(async()=>{ const [r,p]=await Promise.all([api.get('/kontroling/profitabilnost'),api.get('/sales/partners')]); setRows(r.data); setPartners(p.data) },[])
+  useEffect(()=>{ load() },[load])
+
+  const total = f => (+f.mat||0)+(+f.rad||0)+(+f.rez||0)
+  const dobit = f => (+f.prihod||0)-total(f)
+  const save = async()=>{
+    setSaving(true)
+    const p={partner_id:form.partner_id||null,proizvod:form.proizvod,period_god:+form.period_god,period_mj:+form.period_mj,prihod:+form.prihod||0,'trošak_materijal':+form.mat||0,'trošak_rad':+form.rad||0,'trošak_rezija':+form.rez||0,napomena:form.napomena}
+    if(modal==='new') await api.post('/kontroling/profitabilnost',p)
+    else await api.put(`/kontroling/profitabilnost/${form.id}`,p)
+    setSaving(false); setModal(null); load()
+  }
+  const del = async id=>{ if(confirm('Obrisati?')){ await api.delete(`/kontroling/profitabilnost/${id}`); load() } }
+  const filtered = rows.filter(r=>!search||(r.proizvod||'').toLowerCase().includes(search.toLowerCase())||(r.partner_naziv||'').toLowerCase().includes(search.toLowerCase()))
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+      <div style={{ display:'flex', gap:10, alignItems:'center', flexWrap:'wrap' }}>
+        <input placeholder="Pretraži proizvod, partner..." value={search} onChange={e=>setSearch(e.target.value)} style={{ ...S.input, width:240, padding:'7px 12px' }}/>
+        <button onClick={()=>exportCSV(filtered.map(r=>[r.proizvod,r.partner_naziv||'—',`${r.period_god}/${MJ[r.period_mj]}`,r.prihod,r.ukupni_trosak,r.bruto_dobit,r.marza_posto?.toFixed(1)]),['Proizvod','Partner','Period','Prihod','Troš.','Dobit','Marža%'],'profitabilnost.csv')} style={S.ghost}><Download size={13}/> CSV</button>
+        <button onClick={()=>{ setForm({period_god:godina,period_mj:new Date().getMonth()+1,prihod:0,mat:0,rad:0,rez:0}); setModal('new') }} style={{ ...S.btn(), marginLeft:'auto' }}><Plus size={14}/> Dodaj</button>
+      </div>
+      <div style={{ ...S.card, padding:0, overflow:'hidden' }}>
+        <table style={{ width:'100%', borderCollapse:'collapse' }}>
+          <thead style={{ background:C.surface2 }}>
+            <tr>{['Proizvod','Partner','Period','Prihod','Ukupni troš.','Bruto dobit','Marža',''].map(h=><th key={h} style={S.th}>{h}</th>)}</tr>
+          </thead>
+          <tbody>
+            {filtered.length===0 && <tr><td colSpan={8} style={{ ...S.td, textAlign:'center', padding:32, color:C.muted }}>Nema podataka</td></tr>}
+            {filtered.map(r=>{
+              const mc = r.marza_posto>=20?C.green:r.marza_posto>=10?C.orange:C.red
+              return (
+                <tr key={r.id} onMouseOver={e=>e.currentTarget.style.background=C.surface2+'88'} onMouseOut={e=>e.currentTarget.style.background='transparent'}>
+                  <td style={{ ...S.td, fontWeight:600, color:'#E8F2F0' }}>{r.proizvod}</td>
+                  <td style={{ ...S.td, fontSize:11, color:C.muted }}>{r.partner_naziv||'—'}</td>
+                  <td style={{ ...S.td, fontSize:11 }}>{r.period_god}/{MJ[r.period_mj]}</td>
+                  <td style={{ ...S.td, fontFamily:'monospace' }}>{EUR(r.prihod)}</td>
+                  <td style={{ ...S.td, fontFamily:'monospace' }}>{EUR(r.ukupni_trosak)}</td>
+                  <td style={{ ...S.td, fontFamily:'monospace', fontWeight:700, color:r.bruto_dobit>=0?C.green:C.red }}>{EUR(r.bruto_dobit)}</td>
+                  <td style={S.td}><span style={{ background:mc+'22', color:mc, borderRadius:20, padding:'2px 9px', fontSize:11, fontWeight:700 }}>{PCT(r.marza_posto)}</span></td>
+                  <td style={S.td}>
+                    <div style={{ display:'flex', gap:6 }}>
+                      <button onClick={()=>{ setForm({...r,mat:r.trosak_materijal,rad:r.trosak_rad,rez:r.trosak_rezija}); setModal('edit') }} style={{ background:'none', border:'none', cursor:'pointer', color:C.muted }} onMouseOver={e=>e.currentTarget.style.color=C.accent} onMouseOut={e=>e.currentTarget.style.color=C.muted}><Edit2 size={13}/></button>
+                      <button onClick={()=>del(r.id)} style={{ background:'none', border:'none', cursor:'pointer', color:C.muted }} onMouseOver={e=>e.currentTarget.style.color=C.red} onMouseOut={e=>e.currentTarget.style.color=C.muted}><Trash2 size={13}/></button>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      {modal && (
+        <Modal title={modal==='new'?'NOVI UNOS PROFITABILNOSTI':'UREDI UNOS'} onClose={()=>setModal(null)}>
+          <Field label="Proizvod / naziv dijela"><Inp value={form.proizvod} onChange={v=>F('proizvod',v)} placeholder="npr. Nosač osi X"/></Field>
+          <Field label="Partner / kupac"><Sel value={form.partner_id} onChange={v=>F('partner_id',+v)} options={[{value:'',label:'— bez partnera —'},...partners.map(p=>({value:p.id,label:p.name}))]}/></Field>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+            <Field label="Godina"><Inp type="number" value={form.period_god} onChange={v=>F('period_god',v)}/></Field>
+            <Field label="Mjesec"><Sel value={form.period_mj} onChange={v=>F('period_mj',+v)} options={MJ.slice(1).map((m,i)=>({value:i+1,label:m}))}/></Field>
+          </div>
+          <Field label="Prihod (€)"><Inp type="number" value={form.prihod} onChange={v=>F('prihod',v)}/></Field>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
+            <Field label="Materijal (€)"><Inp type="number" value={form.mat} onChange={v=>F('mat',v)}/></Field>
+            <Field label="Rad (€)"><Inp type="number" value={form.rad} onChange={v=>F('rad',v)}/></Field>
+            <Field label="Režija (€)"><Inp type="number" value={form.rez} onChange={v=>F('rez',v)}/></Field>
+          </div>
+          <div style={{ background:C.surface3, borderRadius:8, padding:'10px 14px', display:'flex', justifyContent:'space-between' }}>
+            <div><span style={{ fontSize:10, color:C.muted }}>UKUPNI TROŠAK</span><div style={{ fontSize:15, fontWeight:700, color:C.red, fontFamily:"'Chakra Petch',sans-serif" }}>{EUR(total(form))}</div></div>
+            <div style={{ textAlign:'right' }}><span style={{ fontSize:10, color:C.muted }}>DOBIT</span><div style={{ fontSize:15, fontWeight:700, color:dobit(form)>=0?C.green:C.red, fontFamily:"'Chakra Petch',sans-serif" }}>{EUR(dobit(form))}</div></div>
+          </div>
+          <Field label="Napomena"><Inp value={form.napomena} onChange={v=>F('napomena',v)}/></Field>
+          <SaveRow onSave={save} onClose={()=>setModal(null)} loading={saving}/>
+        </Modal>
+      )}
+    </div>
+  )
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// MAIN PAGE
+// ════════════════════════════════════════════════════════════════════════════
+export default function KontrolingPage() {
+  const [tab,    setTab]    = useState('pregled')
+  const [godina, setGodina] = useState(new Date().getFullYear())
+  const [toast,  showToast] = useToast()
+
+  const TABS = [
+    { id:'pregled',  label:'PREGLED'        },
+    { id:'budzet',   label:'BUDŽET'         },
+    { id:'strojni',  label:'TROŠ. STROJA/h' },
+    { id:'nalog',    label:'TROŠ. NALOGA'   },
+    { id:'profit',   label:'PROFITABILNOST' },
+  ]
+
+  return (
+    <div style={{ fontFamily:"'Chakra Petch',sans-serif", color:C.gray }}>
+      {toast.visible && <div style={{ position:'fixed', top:20, right:20, background:toast.type==='error'?C.red:C.green, color:'#fff', padding:'12px 20px', borderRadius:10, zIndex:9999, fontWeight:700 }}>{toast.message}</div>}
+
+      {/* Header */}
+      <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', marginBottom:20, flexWrap:'wrap', gap:12 }}>
+        <div>
+          <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:4 }}>DEER MES v6</div>
+          <h1 style={{ margin:0, fontSize:22, color:C.accent, letterSpacing:2 }}>💰 KONTROLING</h1>
+          <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>Troškovi · Budžet · Profitabilnost · Strojni sat</div>
+        </div>
+        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+          <span style={{ fontSize:11, color:C.muted }}>GODINA</span>
+          <select value={godina} onChange={e=>setGodina(+e.target.value)}
+            style={{ ...S.input, width:'auto', padding:'7px 12px', fontFamily:"'Chakra Petch',sans-serif" }}>
+            {[2023,2024,2025,2026].map(y=><option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div style={{ display:'flex', gap:2, background:C.surface2, borderRadius:10, padding:4, marginBottom:20, width:'fit-content', flexWrap:'wrap' }}>
+        {TABS.map(t=>(
+          <button key={t.id} onClick={()=>setTab(t.id)} style={{
+            background: tab===t.id ? `linear-gradient(145deg,${C.surface3},${C.surface})` : 'transparent',
+            border: tab===t.id ? `1px solid ${C.border}` : '1px solid transparent',
+            borderRadius:8, padding:'7px 14px', cursor:'pointer',
+            color: tab===t.id ? C.accent : C.muted,
+            fontSize:11, fontWeight:700, letterSpacing:0.8,
+            fontFamily:"'Chakra Petch',sans-serif",
+            transition:'all .15s',
+            boxShadow: tab===t.id ? '0 2px 8px rgba(0,0,0,.25)' : 'none'
+          }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Content */}
+      {tab==='pregled' && <TabPregled godina={godina}/>}
+      {tab==='budzet'  && <TabBudzet  godina={godina}/>}
+      {tab==='strojni' && <TabStrojni/>}
+      {tab==='nalog'   && <TabNalog/>}
+      {tab==='profit'  && <TabProfit  godina={godina}/>}
     </div>
   )
 }

@@ -1,318 +1,131 @@
 import { useState, useEffect, useCallback } from 'react'
+import { C,StatCard,Badge,StatusBadge,QtyBar,Btn,Modal,Field,Inp,Sel,FGrid,SearchBar,FSel,TblWrap,TR,TD,RowActions,Toast,useToast,QtyAdjModal,Loading,EmptyState } from '../components/UI'
 import api from '../utils/api'
-import { C, useToast } from '../components/UI'
-import { Wrench, AlertTriangle, CheckCircle, RefreshCcw, Plus, X, Save, RotateCcw } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
 
-const STATUS_CFG = {
-  ok:      { label:'OK',       color:C.green,  bg:C.green+'22'  },
-  warning: { label:'Upozorenje',color:C.orange, bg:C.orange+'22' },
-  replace: { label:'ZAMJENA!', color:C.red,    bg:C.red+'22'    },
-}
+const TYPES = [{v:'stega',l:'Stega'},{v:'brusna_ploca',l:'Brusna ploča'},{v:'ostalo',l:'Ostalo'}]
+const TYPE_ICON = { stega:'⬢', brusna_ploca:'◉', ostalo:'◫' }
+const E = { internalId:'',name:'',type:'stega',dimensions:'',clampingRange:'',jawWidth:'',storageLocation:'',currentQuantity:0,minQuantity:1,notes:'' }
 
-function LifeBar({ pct, color }) {
-  const c = pct >= 100 ? C.red : pct >= 85 ? C.orange : C.green
-  return (
-    <div style={{ width:'100%' }}>
-      <div style={{ height:8, background:C.surface3, borderRadius:4, overflow:'hidden', marginBottom:3 }}>
-        <div style={{ width:`${Math.min(100,pct)}%`, height:'100%',
-          background:`linear-gradient(90deg,${c},${c}88)`, borderRadius:4, transition:'width .5s ease' }}/>
-      </div>
-      <div style={{ fontSize:10, color:c, fontWeight:600 }}>{Math.round(pct)}% životnog vijeka</div>
-    </div>
-  )
-}
-
-const S = {
-  card:  { background: C.surface, border:`1px solid ${C.border}`, borderRadius:12, padding:20 },
-  input: { background: C.surface2, border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 12px', color:C.gray, fontSize:13, outline:'none', width:'100%', boxSizing:'border-box' },
-  label: { fontSize:11, color:C.muted, letterSpacing:1.2, textTransform:'uppercase', marginBottom:4, display:'block' },
-  btn: (col=C.accent) => ({ background:col, border:'none', borderRadius:8, padding:'8px 16px', color:col===C.accent?'#1a2a28':C.gray, fontWeight:600, fontSize:13, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }),
-  ghost: { background:'transparent', border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 14px', color:C.muted, fontSize:13, cursor:'pointer', display:'flex', alignItems:'center', gap:6 },
-  th: { padding:'9px 12px', fontSize:10, color:C.muted, letterSpacing:1.2, textTransform:'uppercase', textAlign:'left', borderBottom:`1px solid ${C.border}` },
-  td: { padding:'10px 12px', fontSize:13, color:C.gray, borderBottom:`1px solid ${C.border}22` },
-}
-
-function ConfigModal({ open, onClose, onSave, tools, existing }) {
-  const [form, setForm] = useState({ tool_id:'', life_limit_strokes:2000, life_limit_minutes:100, notes:'' })
-  useEffect(() => {
-    if (existing) setForm({ tool_id:existing.tool_id||'', life_limit_strokes:existing.life_limit_strokes||2000, life_limit_minutes:existing.life_limit_minutes||100, notes:existing.notes||'' })
-    else setForm({ tool_id:'', life_limit_strokes:2000, life_limit_minutes:100, notes:'' })
-  }, [open, existing])
-  if (!open) return null
-  return (
-    <div onClick={e=>e.target===e.currentTarget&&onClose()} style={{ position:'fixed',inset:0,background:'rgba(10,20,18,.88)',backdropFilter:'blur(6px)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:20 }}>
-      <div style={{ background:`linear-gradient(145deg,${C.surface},${C.surface2})`,border:`1px solid ${C.border}`,borderRadius:18,padding:32,width:480,maxWidth:'100%' }}>
-        <div style={{ display:'flex',justifyContent:'space-between',marginBottom:24 }}>
-          <span style={{ fontSize:16,fontWeight:700,color:C.accent,letterSpacing:1.5,fontFamily:"'Chakra Petch',sans-serif" }}>KONFIGURACIJA ŽIVOTNOG VIJEKA</span>
-          <button onClick={onClose} style={{ background:'transparent',border:'none',color:C.muted,cursor:'pointer' }}><X size={18}/></button>
-        </div>
-        <div style={{ display:'flex',flexDirection:'column',gap:14 }}>
-          {!existing && (
-            <div>
-              <label style={S.label}>Alat *</label>
-              <select style={S.input} value={form.tool_id} onChange={e=>setForm(f=>({...f,tool_id:e.target.value}))}>
-                <option value="">— odaberi alat —</option>
-                {tools.map(t=><option key={t.id} value={t.id}>{t.name} ({t.category})</option>)}
-              </select>
-            </div>
-          )}
-          <div>
-            <label style={S.label}>Limit hodova (strokes)</label>
-            <input type="number" style={S.input} value={form.life_limit_strokes} onChange={e=>setForm(f=>({...f,life_limit_strokes:parseInt(e.target.value)||0}))} min="0"/>
-            <div style={{ fontSize:10,color:C.muted,marginTop:3 }}>0 = ne prati hodove</div>
-          </div>
-          <div>
-            <label style={S.label}>Limit minuta</label>
-            <input type="number" style={S.input} value={form.life_limit_minutes} onChange={e=>setForm(f=>({...f,life_limit_minutes:parseFloat(e.target.value)||0}))} min="0" step="0.5"/>
-            <div style={{ fontSize:10,color:C.muted,marginTop:3 }}>0 = ne prati minute</div>
-          </div>
-          <div>
-            <label style={S.label}>Napomena</label>
-            <input style={S.input} value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} placeholder="npr. Oštri se kod 1800 hodova"/>
-          </div>
-        </div>
-        <div style={{ display:'flex',justifyContent:'flex-end',gap:10,marginTop:24 }}>
-          <button style={S.ghost} onClick={onClose}>Odustani</button>
-          <button style={S.btn()} onClick={()=>onSave(form)}><Save size={14}/> Spremi</button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function UseModal({ open, onClose, onSave, tool }) {
-  const [strokes, setStrokes] = useState(0)
-  const [minutes, setMinutes] = useState(0)
-  useEffect(() => { setStrokes(0); setMinutes(0) }, [open])
-  if (!open || !tool) return null
-  return (
-    <div onClick={e=>e.target===e.currentTarget&&onClose()} style={{ position:'fixed',inset:0,background:'rgba(10,20,18,.88)',backdropFilter:'blur(6px)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:20 }}>
-      <div style={{ background:`linear-gradient(145deg,${C.surface},${C.surface2})`,border:`1px solid ${C.border}`,borderRadius:18,padding:32,width:400 }}>
-        <div style={{ display:'flex',justifyContent:'space-between',marginBottom:20 }}>
-          <span style={{ fontSize:15,fontWeight:700,color:C.accent,letterSpacing:1 }}>DODAJ UPOTREBU</span>
-          <button onClick={onClose} style={{ background:'transparent',border:'none',color:C.muted,cursor:'pointer' }}><X size={16}/></button>
-        </div>
-        <div style={{ fontSize:13,color:C.muted,marginBottom:16 }}>{tool.tool_name}</div>
-        <div style={{ marginBottom:12 }}>
-          <label style={S.label}>Hodovi (strokes)</label>
-          <input type="number" style={S.input} value={strokes} onChange={e=>setStrokes(parseInt(e.target.value)||0)} min="0"/>
-        </div>
-        <div style={{ marginBottom:20 }}>
-          <label style={S.label}>Minute</label>
-          <input type="number" style={S.input} value={minutes} onChange={e=>setMinutes(parseFloat(e.target.value)||0)} min="0" step="0.1"/>
-        </div>
-        <div style={{ display:'flex',justifyContent:'flex-end',gap:10 }}>
-          <button style={S.ghost} onClick={onClose}>Odustani</button>
-          <button style={S.btn(C.teal)} onClick={()=>{onSave(tool.id,strokes,minutes);onClose()}}><CheckCircle size={14}/> Dodaj</button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export default function ToolLifePage() {
-  const [list, setList] = useState([])
-  const [alerts, setAlerts] = useState([])
-  const [tools, setTools] = useState([])
+export default function StegePage() {
+  const { canEdit } = useAuth()
+  const [items, setItems] = useState([])
+  const [stats, setStats] = useState({})
   const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [typeF, setTypeF] = useState('')
   const [modal, setModal] = useState(false)
   const [editItem, setEditItem] = useState(null)
-  const [useModal, setUseModal] = useState(false)
-  const [useTool, setUseTool] = useState(null)
-  const [search, setSearch] = useState('')
-  const [filterStatus, setFilterStatus] = useState('all')
+  const [form, setForm] = useState(E)
+  const [saving, setSaving] = useState(false)
+  const [qtyModal, setQtyModal] = useState(null)
   const [toast, showToast] = useToast()
+  const f = (k,v) => setForm(p=>({...p,[k]:v}))
 
   const load = useCallback(async () => {
-    setLoading(true)
     try {
-      const [lifeR, alertsR, toolsR] = await Promise.all([
-        api.get('/tool-life'),
-        api.get('/tool-life/alerts/pending'),
-        api.get('/tools'),
-      ])
-      setList(lifeR.data || [])
-      setAlerts(alertsR.data || [])
-      setTools(toolsR.data || [])
-    } catch { showToast('Greška pri učitavanju', 'error') }
-    setLoading(false)
-  }, [])
+      const p={}; if(search)p.search=search; if(typeF)p.type=typeF
+      const [it,st] = await Promise.all([api.get('/clamping',{params:p}),api.get('/clamping/stats')])
+      setItems(it.data); setStats(st.data)
+    } catch { setItems([]); setStats({total:0,available:0,low:0,critical:0}) }
+    finally { setLoading(false) }
+  },[search,typeF])
 
-  useEffect(() => { load() }, [load])
+  useEffect(()=>{ load() },[load])
 
-  const saveConfig = async (form) => {
-    try {
-      await api.post('/tool-life', form)
-      showToast('Konfiguracija spremljena')
-      setModal(false); setEditItem(null); load()
-    } catch { showToast('Greška', 'error') }
+  const openAdd = () => { setEditItem(null); setForm(E); setModal(true) }
+  const openEdit = (it) => {
+    setEditItem(it)
+    setForm({ internalId:it.internal_id||'',name:it.name,type:it.type||'stega',dimensions:it.dimensions||'',clampingRange:it.clamping_range||'',jawWidth:it.jaw_width||'',storageLocation:it.storage_location||'',currentQuantity:it.current_quantity,minQuantity:it.min_quantity,notes:it.notes||'' })
+    setModal(true)
   }
 
-  const recordUse = async (id, strokes, minutes) => {
+  const save = async () => {
+    if (!form.name) { showToast('Naziv je obavezan!','error'); return }
+    setSaving(true)
     try {
-      await api.patch(`/tool-life/${id}/use`, { strokes, minutes })
-      showToast('Upotreba evidentirana')
-      load()
-    } catch { showToast('Greška', 'error') }
+      if (editItem) { const r=await api.put(`/clamping/${editItem.id}`,form); setItems(items.map(i=>i.id===editItem.id?r.data:i)); showToast('✓ Ažurirano') }
+      else { const r=await api.post('/clamping',form); setItems([r.data,...items]); showToast('✓ Dodano') }
+      setModal(false)
+    } catch(e) { showToast(e.response?.data?.error||'Greška','error') }
+    finally { setSaving(false) }
   }
 
-  const resetTool = async (id) => {
-    if (!confirm('Resetirati životni vijek? (npr. nakon oštrenja)')) return
-    try {
-      await api.patch(`/tool-life/${id}/reset`)
-      showToast('Alat resetiran — životni vijek osvježen')
-      load()
-    } catch { showToast('Greška', 'error') }
+  const del = async (id) => {
+    if (!confirm('Obrisati?')) return
+    try { await api.delete(`/clamping/${id}`); setItems(items.filter(i=>i.id!==id)); showToast('Obrisano') }
+    catch { showToast('Greška','error') }
   }
 
-  const filtered = list.filter(t => {
-    const ms = !search || t.tool_name?.toLowerCase().includes(search.toLowerCase()) || t.category?.toLowerCase().includes(search.toLowerCase())
-    const mf = filterStatus === 'all' || t.status === filterStatus
-    return ms && mf
-  })
+  const saveQty = async (change, note) => {
+    try { const r=await api.patch(`/clamping/${qtyModal.id}/quantity`,{change,note}); setItems(items.map(i=>i.id===qtyModal.id?r.data:i)); showToast('✓ Količina ažurirana') }
+    catch { showToast('Greška','error') }
+  }
 
-  // Alati koji još nisu konfigurirani za praćenje
-  const trackedToolIds = new Set(list.map(l => l.tool_id))
-  const untrackedTools = tools.filter(t => !trackedToolIds.has(t.id))
+  const typeLabel = (t) => TYPES.find(x=>x.v===t)?.l||t
 
   return (
-    <div style={{ padding:24, maxWidth:1300, margin:'0 auto' }}>
-      {toast.visible && <div style={{ position:'fixed',top:20,right:20,background:toast.type==='error'?C.red:C.green,color:'#fff',borderRadius:10,padding:'12px 22px',fontWeight:600,zIndex:9999 }}>{toast.message}</div>}
-
-      {/* Header */}
-      <div style={{ display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:24 }}>
-        <div>
-          <div style={{ display:'flex',alignItems:'center',gap:10,marginBottom:4 }}>
-            <Wrench size={24} color={C.accent}/>
-            <h1 style={{ color:C.accent,fontSize:22,fontWeight:700,margin:0,fontFamily:"'Chakra Petch',sans-serif",letterSpacing:1 }}>ŽIVOTNI VIJEK ALATA</h1>
-          </div>
-          <div style={{ color:C.muted,fontSize:13 }}>Praćenje habanja CNC alata — upozorenja i zamjena</div>
-        </div>
-        <div style={{ display:'flex',gap:8 }}>
-          <button style={S.ghost} onClick={load}><RefreshCcw size={14}/></button>
-          <button style={S.btn()} onClick={()=>{setEditItem(null);setModal(true)}}><Plus size={14}/> Dodaj praćenje</button>
-        </div>
+    <div>
+      <div style={{ display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:14,marginBottom:22 }}>
+        <StatCard label="Ukupno" value={stats.total} color="yellow"/>
+        <StatCard label="Dostupno" value={stats.available} color="green"/>
+        <StatCard label="Niske zalihe" value={stats.low} color="orange"/>
+        <StatCard label="Kritično" value={stats.critical} color="red"/>
       </div>
 
-      {/* Alert banner */}
-      {alerts.length > 0 && (
-        <div style={{ ...S.card, marginBottom:16, borderLeft:`4px solid ${C.red}`, background:`${C.red}08` }}>
-          <div style={{ fontSize:11,color:C.red,letterSpacing:1.5,marginBottom:10,fontWeight:700,display:'flex',alignItems:'center',gap:6 }}>
-            <AlertTriangle size={13}/> ZAHTIJEVA AKCIJU — {alerts.length} ALAT(A)
-          </div>
-          <div style={{ display:'flex',gap:10,flexWrap:'wrap' }}>
-            {alerts.map(a => (
-              <div key={a.id} style={{ background:a.status==='replace'?`${C.red}22`:`${C.orange}22`, border:`1px solid ${a.status==='replace'?C.red:C.orange}44`, borderRadius:8, padding:'8px 14px' }}>
-                <div style={{ fontSize:12,fontWeight:700,color:a.status==='replace'?C.red:C.orange }}>{a.tool_name}</div>
-                <div style={{ fontSize:10,color:C.muted }}>{a.category} · {Math.round(a.life_pct)}% iskorišteno</div>
-                <div style={{ fontSize:11,color:a.status==='replace'?C.red:C.orange,marginTop:3,fontWeight:600 }}>
-                  {a.status==='replace'?'⛔ ZAMIJENI ODMAH':'⚠ Pripremi zamjenu'}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Stats */}
-      <div style={{ display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12,marginBottom:20 }}>
-        {[
-          { label:'Praćenih alata', val:list.length,                           color:C.accent },
-          { label:'OK',             val:list.filter(l=>l.status==='ok').length, color:C.green  },
-          { label:'Upozorenje',     val:list.filter(l=>l.status==='warning').length, color:C.orange },
-          { label:'Zamjena!',       val:list.filter(l=>l.status==='replace').length, color:C.red    },
-        ].map(s=>(
-          <div key={s.label} style={{ background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:'12px 16px',borderTop:`3px solid ${s.color}` }}>
-            <div style={{ fontSize:10,color:C.muted,letterSpacing:1.5,textTransform:'uppercase',marginBottom:6 }}>{s.label}</div>
-            <div style={{ fontSize:28,fontWeight:700,color:s.color,fontFamily:"'Chakra Petch',sans-serif" }}>{s.val}</div>
-          </div>
-        ))}
+      <div style={{ display:'flex',alignItems:'center',gap:10,marginBottom:16,flexWrap:'wrap' }}>
+        <SearchBar value={search} onChange={e=>setSearch(e.target.value)} placeholder="Naziv ili ID..."/>
+        <FSel value={typeF} onChange={e=>setTypeF(e.target.value)}>
+          <option value="">Sve vrste</option>
+          {TYPES.map(t=><option key={t.v} value={t.v}>{t.l}</option>)}
+        </FSel>
+        {canEdit&&<Btn onClick={openAdd} style={{marginLeft:'auto'}}>+ Dodaj</Btn>}
       </div>
 
-      {/* Filters */}
-      <div style={{ ...S.card, marginBottom:16, display:'flex', gap:12, alignItems:'center', flexWrap:'wrap' }}>
-        <input placeholder="Pretraži alate..." value={search} onChange={e=>setSearch(e.target.value)}
-          style={{ ...S.input, maxWidth:260 }} />
-        <div style={{ display:'flex',gap:6 }}>
-          {['all','ok','warning','replace'].map(s=>(
-            <button key={s} onClick={()=>setFilterStatus(s)}
-              style={{ background:filterStatus===s?(STATUS_CFG[s]?.bg||C.accent+'22'):'transparent',
-                       border:`1px solid ${filterStatus===s?(STATUS_CFG[s]?.color||C.accent):C.border}`,
-                       color:filterStatus===s?(STATUS_CFG[s]?.color||C.accent):C.muted,
-                       borderRadius:6,padding:'5px 12px',fontSize:11,fontWeight:600,cursor:'pointer' }}>
-              {s==='all'?'Sve':STATUS_CFG[s]?.label}
-            </button>
+      {loading ? <Loading/> : !items.length ? <EmptyState icon="⬢" text="Nema stega. Dodaj prvu stavku."/> : (
+        <TblWrap headers={['Naziv','Vrsta','Dimenzije','Raspon stezanja','Širina čeljusti','Lokacija','Zalihe','Status','']}>
+          {items.map(it=>(
+            <TR key={it.id}>
+              <TD><div style={{ display:'flex',alignItems:'center',gap:9 }}>
+                <div style={{ width:32,height:32,borderRadius:8,background:C.surface2,border:`1px solid ${C.border}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0 }}>{TYPE_ICON[it.type]||'◫'}</div>
+                <div><div style={{ fontWeight:600,color:'#e8f0ee',fontSize:13 }}>{it.name}</div><div style={{ fontSize:10,color:C.muted2,fontFamily:'monospace' }}>{it.internal_id}</div></div>
+              </div></TD>
+              <TD><Badge type="teal">{typeLabel(it.type)}</Badge></TD>
+              <TD mono muted>{it.dimensions||'—'}</TD>
+              <TD muted>{it.clamping_range||'—'}</TD>
+              <TD muted>{it.jaw_width||'—'}</TD>
+              <TD mono>{it.storage_location||'—'}</TD>
+              <TD><QtyBar current={it.current_quantity} min={it.min_quantity}/></TD>
+              <TD><StatusBadge status={it.status}/></TD>
+              <TD><RowActions onQty={()=>setQtyModal(it)} onEdit={()=>openEdit(it)} onDelete={()=>del(it.id)} canEdit={canEdit}/></TD>
+            </TR>
           ))}
-        </div>
-      </div>
-
-      {/* Table */}
-      <div style={{ ...S.card, overflowX:'auto' }}>
-        {loading ? (
-          <div style={{ textAlign:'center',padding:40,color:C.muted }}>Učitavanje...</div>
-        ) : filtered.length === 0 ? (
-          <div style={{ textAlign:'center',padding:60,color:C.muted }}>
-            <Wrench size={40} style={{ opacity:.3,marginBottom:12 }}/>
-            <div>Nema praćenih alata. Dodajte prvi!</div>
-          </div>
-        ) : (
-          <table style={{ width:'100%',borderCollapse:'collapse' }}>
-            <thead>
-              <tr>{['Alat','Kategorija','Status','Životni vijek','Hodovi','Minute','Akcije'].map(h=><th key={h} style={S.th}>{h}</th>)}</tr>
-            </thead>
-            <tbody>
-              {filtered.map(t => {
-                const st = STATUS_CFG[t.status] || STATUS_CFG.ok
-                return (
-                  <tr key={t.id} onMouseOver={e=>e.currentTarget.style.background=C.surface2+'88'} onMouseOut={e=>e.currentTarget.style.background='transparent'}>
-                    <td style={{ ...S.td, fontWeight:700 }}>{t.tool_name}</td>
-                    <td style={{ ...S.td, color:C.muted }}>{t.category}</td>
-                    <td style={S.td}>
-                      <span style={{ background:st.bg,color:st.color,borderRadius:6,padding:'3px 10px',fontSize:11,fontWeight:600 }}>
-                        {st.label}
-                      </span>
-                    </td>
-                    <td style={{ ...S.td, minWidth:180 }}>
-                      <LifeBar pct={parseFloat(t.life_pct)||0}/>
-                    </td>
-                    <td style={{ ...S.td, color:C.muted }}>
-                      {t.life_limit_strokes>0 ? `${t.strokes_used} / ${t.life_limit_strokes}` : '—'}
-                    </td>
-                    <td style={{ ...S.td, color:C.muted }}>
-                      {t.life_limit_minutes>0 ? `${Math.round(t.minutes_used*10)/10} / ${t.life_limit_minutes}` : '—'}
-                    </td>
-                    <td style={S.td}>
-                      <div style={{ display:'flex',gap:4 }}>
-                        <button style={{ ...S.ghost,padding:'4px 8px',color:C.teal }} title="Dodaj upotrebu" onClick={()=>{setUseTool(t);setUseModal(true)}}>+</button>
-                        <button style={{ ...S.ghost,padding:'4px 8px',color:C.blue }} title="Konfiguriraj" onClick={()=>{setEditItem(t);setModal(true)}}><Save size={11}/></button>
-                        <button style={{ ...S.ghost,padding:'4px 8px',color:C.orange }} title="Reset (oštrenje)" onClick={()=>resetTool(t.id)}><RotateCcw size={11}/></button>
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      {/* Untracked tools */}
-      {untrackedTools.length > 0 && (
-        <div style={{ ...S.card, marginTop:16 }}>
-          <div style={{ fontSize:11,color:C.muted,letterSpacing:1.5,marginBottom:12 }}>ALATI BEZ PRAĆENJA ({untrackedTools.length})</div>
-          <div style={{ display:'flex',gap:8,flexWrap:'wrap' }}>
-            {untrackedTools.map(t=>(
-              <button key={t.id} style={{ ...S.ghost,fontSize:11,padding:'4px 10px' }}
-                onClick={()=>{setEditItem(null);setModal(true)}}>
-                + {t.name}
-              </button>
-            ))}
-          </div>
-        </div>
+        </TblWrap>
       )}
 
-      <ConfigModal open={modal} onClose={()=>{setModal(false);setEditItem(null)}} onSave={saveConfig} tools={untrackedTools} existing={editItem}/>
-      <UseModal open={useModal} onClose={()=>{setUseModal(false);setUseTool(null)}} onSave={recordUse} tool={useTool}/>
+      <Modal open={modal} onClose={()=>setModal(false)} title={editItem?'Uredi':'Dodaj stegu / brusnu ploču'} width={580}>
+        <FGrid>
+          <Field label="Naziv" req><Inp placeholder="Stega Kurt D688" value={form.name} onChange={e=>f('name',e.target.value)}/></Field>
+          <Field label="Interni ID"><Inp placeholder="CD-001" value={form.internalId} onChange={e=>f('internalId',e.target.value)}/></Field>
+          <Field label="Vrsta" req><Sel value={form.type} onChange={e=>f('type',e.target.value)}>{TYPES.map(t=><option key={t.v} value={t.v}>{t.l}</option>)}</Sel></Field>
+          <Field label="Dimenzije"><Inp placeholder="160×88mm" value={form.dimensions} onChange={e=>f('dimensions',e.target.value)}/></Field>
+          {form.type==='stega'&&<>
+            <Field label="Raspon stezanja"><Inp placeholder="0–160mm" value={form.clampingRange} onChange={e=>f('clampingRange',e.target.value)}/></Field>
+            <Field label="Širina čeljusti"><Inp placeholder="88mm" value={form.jawWidth} onChange={e=>f('jawWidth',e.target.value)}/></Field>
+          </>}
+          <Field label="Lokacija"><Inp placeholder="G1-R1" value={form.storageLocation} onChange={e=>f('storageLocation',e.target.value)}/></Field>
+          <Field label="Trenutna količina" req><Inp type="number" min="0" value={form.currentQuantity} onChange={e=>f('currentQuantity',parseInt(e.target.value)||0)}/></Field>
+          <Field label="Minimalna količina" req><Inp type="number" min="1" value={form.minQuantity} onChange={e=>f('minQuantity',parseInt(e.target.value)||1)}/></Field>
+          <Field label="Napomena" full><Inp placeholder="Opcijalno..." value={form.notes} onChange={e=>f('notes',e.target.value)}/></Field>
+        </FGrid>
+        <div style={{ display:'flex',gap:10,justifyContent:'flex-end',marginTop:22 }}>
+          <Btn v="secondary" onClick={()=>setModal(false)}>Odustani</Btn>
+          <Btn onClick={save} disabled={saving}>{saving?'Sprema...':'Spremi'}</Btn>
+        </div>
+      </Modal>
+
+      <QtyAdjModal open={!!qtyModal} onClose={()=>setQtyModal(null)} item={qtyModal} onSave={saveQty}/>
+      <Toast {...toast}/>
     </div>
   )
 }

@@ -1,177 +1,161 @@
 import { useState, useEffect } from 'react'
 import { C, useToast, StatCard } from '../components/UI'
 import api from '../utils/api'
-import { Plus, RefreshCw, Check, X, AlertTriangle, Wrench, Clock } from 'lucide-react'
-
-const PRIORITY_COLOR = { urgent: C.red, high: C.orange, normal: C.teal, low: C.muted }
-const STATUS_COLOR = { open: C.orange, in_progress: C.blue, completed: C.green, cancelled: C.muted }
+import { Plus, RefreshCw, Check, X, AlertTriangle } from 'lucide-react'
 
 const Inp = ({label,...p}) => <div style={{display:'flex',flexDirection:'column',gap:4}}><label style={{fontSize:11,color:C.muted}}>{label}</label><input {...p} style={{background:C.surface3,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 12px',color:C.gray,fontSize:13,outline:'none'}}/></div>
 const Sel = ({label,children,...p}) => <div style={{display:'flex',flexDirection:'column',gap:4}}><label style={{fontSize:11,color:C.muted}}>{label}</label><select {...p} style={{background:C.surface3,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 12px',color:C.gray,fontSize:13,outline:'none'}}>{children}</select></div>
-const Textarea = ({label,...p}) => <div style={{display:'flex',flexDirection:'column',gap:4}}><label style={{fontSize:11,color:C.muted}}>{label}</label><textarea {...p} style={{background:C.surface3,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 12px',color:C.gray,fontSize:13,outline:'none',resize:'vertical',minHeight:70}}/></div>
-const Modal = ({title,onClose,children}) => <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.7)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}><div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:16,width:'100%',maxWidth:520,maxHeight:'90vh',overflowY:'auto',padding:28}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}><h3 style={{color:C.accent,margin:0,fontSize:16}}>{title}</h3><X size={18} style={{cursor:'pointer',color:C.muted}} onClick={onClose}/></div>{children}</div></div>
-const Btn = ({onClick,children,color=C.accent,sm,disabled}) => <button onClick={onClick} disabled={disabled} style={{background:color,color:C.bg,border:'none',borderRadius:sm?6:8,padding:sm?'4px 10px':'8px 16px',cursor:disabled?'not-allowed':'pointer',fontSize:sm?11:13,fontWeight:700,display:'flex',alignItems:'center',gap:4,opacity:disabled?.5:1}}>{children}</button>
+const Modal = ({title,onClose,children}) => <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.7)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}><div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:16,width:'100%',maxWidth:560,maxHeight:'90vh',overflowY:'auto',padding:28}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}><h3 style={{color:C.accent,margin:0,fontSize:16}}>{title}</h3><X size={18} style={{cursor:'pointer',color:C.muted}} onClick={onClose}/></div>{children}</div></div>
+const Btn = ({onClick,children,color=C.accent,sm}) => <button onClick={onClick} style={{background:color,color:sm?C.gray:C.bg,border:'none',borderRadius:sm?6:8,padding:sm?'4px 10px':'8px 16px',cursor:'pointer',fontSize:sm?11:13,fontWeight:700,display:'flex',alignItems:'center',gap:4}}>{children}</button>
 
-const Pill = ({label,color}) => <span style={{background:`${color}22`,color,border:`1px solid ${color}44`,borderRadius:20,padding:'2px 10px',fontSize:11,fontWeight:700}}>{label?.toUpperCase()}</span>
-
-export default function MachineMaintPage() {
-  const [orders, setOrders] = useState([])
-  const [machines, setMachines] = useState([])
-  const [users, setUsers] = useState([])
+export default function WarehousePage() {
+  const [tab, setTab] = useState('materials')
+  const [materials, setMaterials] = useState([])
+  const [stocks, setStocks] = useState([])
+  const [lowStock, setLowStock] = useState([])
+  const [warehouses, setWarehouses] = useState([])
+  const [partners, setPartners] = useState([])
   const [modal, setModal] = useState(null)
-  const [selected, setSelected] = useState(null)
   const [form, setForm] = useState({})
-  const [filter, setFilter] = useState('all')
   const [toast, showToast] = useToast()
 
   const load = async () => {
     try {
-      const [mo, mc, us] = await Promise.all([
-        api.get('/maintenance'),
-        api.get('/machines'),
-        api.get('/users').catch(()=>({data:[]}))
+      const [m, s, ls, w, p] = await Promise.all([
+        api.get('/warehouse/materials'),
+        api.get('/warehouse/stocks'),
+        api.get('/warehouse/materials/low-stock').catch(()=>({data:[]})),
+        api.get('/warehouse/warehouses').catch(()=>({data:[]})),
+        api.get('/sales/partners').catch(()=>({data:[]})),
       ])
-      setOrders(mo.data); setMachines(mc.data); setUsers(us.data)
-    } catch { showToast('Greška učitavanja', 'error') }
+      setMaterials(m.data); setStocks(s.data); setLowStock(ls.data)
+      setWarehouses(w.data); setPartners(p.data)
+    } catch { showToast('Greška','error') }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(()=>{ load() },[])
 
-  const handleSave = async () => {
+  const save = async () => {
     try {
-      if (selected) {
-        await api.put(`/maintenance/${selected.id}`, form)
-      } else {
-        await api.post('/maintenance', form)
-      }
-      showToast('Spremljeno!')
-      setModal(null); setForm({}); setSelected(null)
-      load()
-    } catch(e) { showToast(e.response?.data?.error||'Greška', 'error') }
+      if (modal==='new-mat') await api.post('/warehouse/materials', form)
+      if (modal==='receive') await api.post('/warehouse/stocks/receive', form)
+      if (modal==='new-wh') await api.post('/warehouse/warehouses', form)
+      showToast('Uspješno!'); setModal(null); setForm({}); load()
+    } catch(e) { showToast(e.response?.data?.error||'Greška','error') }
   }
 
-  const handleDelete = async (id) => {
-    if (!confirm('Obrisati nalog?')) return
-    await api.delete(`/maintenance/${id}`).catch(()=>{})
-    showToast('Obrisano')
-    load()
-  }
-
-  const handleStatus = async (id, status) => {
-    await api.put(`/maintenance/${id}`, { status }).catch(()=>{})
-    load()
-  }
-
-  const filtered = filter === 'all' ? orders : orders.filter(o => o.status === filter)
-  const stats = {
-    open: orders.filter(o=>o.status==='open').length,
-    in_progress: orders.filter(o=>o.status==='in_progress').length,
-    urgent: orders.filter(o=>o.priority==='urgent'&&o.status!=='completed').length,
-    completed: orders.filter(o=>o.status==='completed').length,
-  }
-
-  const inp = k => ({ value: form[k]||'', onChange: e => setForm(p=>({...p,[k]:e.target.value})) })
+  const inp = k => ({value:form[k]||'',onChange:e=>setForm(p=>({...p,[k]:e.target.value}))})
 
   return (
     <div style={{padding:24,fontFamily:"'Chakra Petch',sans-serif",color:C.gray}}>
       {toast.visible && <div style={{position:'fixed',top:20,right:20,background:toast.type==='error'?C.red:C.green,color:'#fff',padding:'12px 20px',borderRadius:10,zIndex:9999,fontWeight:700}}>{toast.message}</div>}
 
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}>
-        <h1 style={{color:C.accent,margin:0,fontSize:22}}>🔧 ODRŽAVANJE STROJEVA</h1>
+        <h1 style={{color:C.accent,margin:0,fontSize:22}}>📦 SKLADIŠTE</h1>
         <div style={{display:'flex',gap:8}}>
           <Btn onClick={load} color={C.surface3} sm><RefreshCw size={14}/></Btn>
-          <Btn onClick={()=>{setForm({type:'preventive',priority:'normal'});setSelected(null);setModal('form')}}><Plus size={14}/> Novi nalog</Btn>
+          <Btn onClick={()=>{setForm({});setModal(tab==='stocks'?'receive':tab==='warehouses'?'new-wh':'new-mat')}}><Plus size={14}/> Novo</Btn>
         </div>
       </div>
 
-      {/* Stats */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12,marginBottom:20}}>
-        <StatCard label="Otvoreni" value={stats.open} color="orange"/>
-        <StatCard label="U tijeku" value={stats.in_progress} color="teal"/>
-        <StatCard label="Hitno!" value={stats.urgent} color="red"/>
-        <StatCard label="Završeno" value={stats.completed} color="green"/>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:12,marginBottom:20}}>
+        <StatCard label="Materijali" value={materials.length} color="teal"/>
+        <StatCard label="Zalihe (stavke)" value={stocks.length} color="blue"/>
+        <StatCard label="Niska zaliha!" value={lowStock.length} color="red"/>
+        <StatCard label="Skladišta" value={warehouses.length} color="yellow"/>
       </div>
 
-      {/* Filter tabs */}
-      <div style={{display:'flex',gap:8,marginBottom:16}}>
-        {[['all','Svi'],['open','Otvoreni'],['in_progress','U tijeku'],['completed','Završeni']].map(([k,l])=>(
-          <button key={k} onClick={()=>setFilter(k)} style={{padding:'7px 16px',borderRadius:8,cursor:'pointer',fontSize:12,fontWeight:700,background:filter===k?C.accent:'transparent',color:filter===k?C.bg:C.muted,border:`1px solid ${filter===k?C.accent:C.border}`,transition:'all .2s'}}>{l}</button>
+      {lowStock.length>0 && (
+        <div style={{background:`${C.red}15`,border:`1px solid ${C.red}44`,borderRadius:12,padding:'12px 18px',marginBottom:16,display:'flex',alignItems:'center',gap:10}}>
+          <AlertTriangle size={16} style={{color:C.red,flexShrink:0}}/>
+          <div style={{fontSize:13,color:C.red}}>⚠️ Niska zaliha: {lowStock.map(m=>m.name).join(', ')}</div>
+        </div>
+      )}
+
+      <div style={{display:'flex',gap:8,marginBottom:20}}>
+        {[['materials','Materijali'],['stocks','Zalihe / Šarže'],['warehouses','Skladišta']].map(([k,l])=>(
+          <button key={k} onClick={()=>setTab(k)} style={{padding:'8px 18px',borderRadius:8,cursor:'pointer',fontSize:13,fontWeight:700,background:tab===k?C.accent:'transparent',color:tab===k?C.bg:C.muted,border:`1px solid ${tab===k?C.accent:C.border}`}}>{l}</button>
         ))}
       </div>
 
-      {/* Table */}
-      <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:'hidden'}}>
-        <table style={{width:'100%',borderCollapse:'collapse'}}>
-          <thead>
-            <tr style={{background:C.surface2,borderBottom:`1px solid ${C.border}`}}>
-              {['Stroj','Naziv','Tip','Prioritet','Status','Rok','Akcije'].map(h=>(
-                <th key={h} style={{padding:'11px 14px',textAlign:'left',fontSize:10,color:C.muted,letterSpacing:1.5,textTransform:'uppercase'}}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map(o=>(
-              <tr key={o.id} style={{borderBottom:`1px solid ${C.border}44`}} onMouseOver={e=>e.currentTarget.style.background=C.surface2+'aa'} onMouseOut={e=>e.currentTarget.style.background='transparent'}>
-                <td style={{padding:'12px 14px',fontSize:13}}><span style={{color:C.teal,fontWeight:600}}>{o.machine_name||'—'}</span></td>
-                <td style={{padding:'12px 14px',fontSize:13}}>{o.title}<br/><span style={{fontSize:11,color:C.muted}}>{o.description?.slice(0,50)}</span></td>
-                <td style={{padding:'12px 14px'}}><Pill label={o.type} color={o.type==='preventive'?C.teal:C.orange}/></td>
-                <td style={{padding:'12px 14px'}}><Pill label={o.priority} color={PRIORITY_COLOR[o.priority]||C.muted}/></td>
-                <td style={{padding:'12px 14px'}}><Pill label={o.status} color={STATUS_COLOR[o.status]||C.muted}/></td>
-                <td style={{padding:'12px 14px',fontSize:12,color:o.scheduled_date&&new Date(o.scheduled_date)<new Date()&&o.status!=='completed'?C.red:C.muted}}>{o.scheduled_date||'—'}</td>
-                <td style={{padding:'12px 14px'}}>
-                  <div style={{display:'flex',gap:4}}>
-                    {o.status==='open'&&<Btn sm color={C.teal+'33'} onClick={()=>handleStatus(o.id,'in_progress')}><Wrench size={12}/></Btn>}
-                    {o.status==='in_progress'&&<Btn sm color={C.green+'33'} onClick={()=>handleStatus(o.id,'completed')}><Check size={12}/></Btn>}
-                    <Btn sm color={C.accent+'22'} onClick={()=>{setSelected(o);setForm({...o,machine_id:o.machine_id||''});setModal('form')}}>✎</Btn>
-                    <Btn sm color={C.red+'22'} onClick={()=>handleDelete(o.id)}>✕</Btn>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {filtered.length===0&&<tr><td colSpan={7} style={{padding:40,textAlign:'center',color:C.muted}}>Nema naloga za održavanje</td></tr>}
-          </tbody>
-        </table>
-      </div>
-
-      {modal==='form' && (
-        <Modal title={selected?'Uredi nalog':'Novi nalog za održavanje'} onClose={()=>{setModal(null);setForm({});setSelected(null)}}>
-          <div style={{display:'grid',gap:14}}>
-            <Sel label="STROJ" {...inp('machine_id')}>
-              <option value="">— Odaberi stroj —</option>
-              {machines.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}
-            </Sel>
-            <Inp label="NAZIV NALOGA *" {...inp('title')} placeholder="npr. Preventivni servis Q1"/>
-            <Textarea label="OPIS" {...inp('description')} placeholder="Detalji radova..."/>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
-              <Sel label="TIP" {...inp('type')}>
-                <option value="preventive">Preventivno</option>
-                <option value="corrective">Korektivno</option>
-                <option value="predictive">Prediktivno</option>
-                <option value="emergency">Hitno</option>
-              </Sel>
-              <Sel label="PRIORITET" {...inp('priority')}>
-                <option value="low">Nizak</option>
-                <option value="normal">Normalan</option>
-                <option value="high">Visok</option>
-                <option value="urgent">Hitan</option>
-              </Sel>
+      {tab==='materials' && (
+        <div style={{display:'flex',flexDirection:'column',gap:8}}>
+          {materials.map(m=>(
+            <div key={m.id} style={{background:C.surface,border:`1px solid ${parseFloat(m.total_stock)<=parseFloat(m.min_stock)?C.red:C.border}`,borderRadius:12,padding:'14px 18px',display:'grid',gridTemplateColumns:'2fr 1fr 1fr 1fr 1fr',gap:12,alignItems:'center'}}>
+              <div><div style={{color:C.accent,fontWeight:700}}>{m.name}</div><div style={{color:C.muted,fontSize:11}}>{m.internal_id} · {m.type} · {m.unit}</div></div>
+              <div style={{fontSize:12}}><div style={{color:C.muted}}>Slobodna zaliha</div><div style={{color:parseFloat(m.total_stock)<=parseFloat(m.min_stock)?C.red:C.gray,fontWeight:700}}>{parseFloat(m.total_stock||0).toFixed(2)} {m.unit}</div></div>
+              <div style={{fontSize:12}}><div style={{color:C.muted}}>Min zaliha</div><div>{m.min_stock} {m.unit}</div></div>
+              <div style={{fontSize:12}}><div style={{color:C.muted}}>Dobavljač</div><div style={{color:C.teal}}>{m.supplier||'—'}</div></div>
+              <div style={{fontSize:12}}><div style={{color:C.muted}}>Lokacija</div><div>{m.storage_location||'—'}</div></div>
             </div>
-            <Inp label="PLANIRANI DATUM" type="date" {...inp('scheduled_date')}/>
-            {selected && (
-              <Sel label="STATUS" {...inp('status')}>
-                <option value="open">Otvoren</option>
-                <option value="in_progress">U tijeku</option>
-                <option value="completed">Završen</option>
-                <option value="cancelled">Otkazan</option>
-              </Sel>
-            )}
-            <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:8}}>
-              <Btn color={C.surface3} onClick={()=>{setModal(null);setForm({});setSelected(null)}}>Odustani</Btn>
-              <Btn onClick={handleSave} disabled={!form.title}><Check size={14}/> Spremi</Btn>
-            </div>
-          </div>
-        </Modal>
+          ))}
+          {materials.length===0 && <div style={{color:C.muted,textAlign:'center',padding:40}}>Nema materijala</div>}
+        </div>
       )}
+
+      {tab==='stocks' && (
+        <div style={{display:'flex',flexDirection:'column',gap:8}}>
+          {stocks.map(s=>(
+            <div key={s.id} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'14px 18px',display:'grid',gridTemplateColumns:'2fr 1fr 1fr 1fr 1fr',gap:12,alignItems:'center'}}>
+              <div><div style={{color:C.accent,fontWeight:700}}>{s.material_name}</div><div style={{color:C.muted,fontSize:11}}>Šarža: {s.internal_batch||'—'} {s.external_batch&&`· Ext: ${s.external_batch}`}</div></div>
+              <div style={{fontSize:12}}><div style={{color:C.muted}}>Količina</div><div style={{color:C.gray,fontWeight:700}}>{parseFloat(s.quantity||0).toFixed(3)} {s.unit}</div></div>
+              <div style={{fontSize:12}}><div style={{color:C.muted}}>Dobavljač</div><div>{s.supplier_name||'—'}</div></div>
+              <div style={{fontSize:12}}><div style={{color:C.muted}}>Skladište</div><div style={{color:C.teal}}>{s.warehouse_name||'—'}</div></div>
+              <span style={{background:`${s.status==='slobodan'?C.green:C.orange}22`,color:s.status==='slobodan'?C.green:C.orange,borderRadius:12,padding:'2px 8px',fontSize:10,fontWeight:700}}>{s.status?.toUpperCase()}</span>
+            </div>
+          ))}
+          {stocks.length===0 && <div style={{color:C.muted,textAlign:'center',padding:40}}>Nema zaliha — napravite primku</div>}
+        </div>
+      )}
+
+      {tab==='warehouses' && (
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:12}}>
+          {warehouses.map(w=>(
+            <div key={w.id} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:16}}>
+              <div style={{color:C.accent,fontWeight:700,marginBottom:4}}>{w.name}</div>
+              <div style={{color:C.muted,fontSize:12}}>{w.type?.toUpperCase()} · {w.location||'—'}</div>
+              <div style={{color:C.muted,fontSize:11,marginTop:4}}>{w.stock_count} zaliha</div>
+            </div>
+          ))}
+          {warehouses.length===0 && <div style={{color:C.muted,textAlign:'center',padding:40,gridColumn:'1/-1'}}>Nema skladišta</div>}
+        </div>
+      )}
+
+      {modal==='new-mat' && <Modal title="Novi materijal" onClose={()=>setModal(null)}>
+        <div style={{display:'grid',gap:14}}>
+          <Inp label="NAZIV *" {...inp('name')}/>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+            <Sel label="TIP" {...inp('type')}><option value="raw">Sirovina</option><option value="semi">Poluproizvod</option><option value="finished">Gotovi</option><option value="purchased">Kupljeni</option></Sel>
+            <Inp label="JED. MJERE" {...inp('unit')} placeholder="kom"/>
+          </div>
+          <Inp label="INTERNI KOD" {...inp('internal_id')}/>
+          <Inp label="MIN ZALIHA" type="number" {...inp('min_stock')} placeholder="0"/>
+          <Inp label="LOKACIJA POHRANE" {...inp('storage_location')}/>
+          <Inp label="DOBAVLJAČ" {...inp('supplier')}/>
+          <Btn onClick={save}><Check size={14}/> Spremi</Btn>
+        </div>
+      </Modal>}
+
+      {modal==='receive' && <Modal title="Primka — ulaz materijala" onClose={()=>setModal(null)}>
+        <div style={{display:'grid',gap:14}}>
+          <Sel label="MATERIJAL *" {...inp('material_id')}><option value="">— Odaberi —</option>{materials.map(m=><option key={m.id} value={m.id}>{m.name} ({m.internal_id||'—'})</option>)}</Sel>
+          <Sel label="SKLADIŠTE" {...inp('warehouse_id')}><option value="">—</option>{warehouses.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}</Sel>
+          <Sel label="DOBAVLJAČ" {...inp('supplier_id')}><option value="">—</option>{partners.filter(p=>p.type!=='customer').map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</Sel>
+          <Inp label="KOLIČINA *" type="number" {...inp('quantity')}/>
+          <Inp label="MASA (kg)" type="number" {...inp('mass_kg')}/>
+          <Inp label="BROJ ŠARŽE DOBAVLJAČA" {...inp('external_batch')}/>
+          <Btn onClick={save}><Check size={14}/> Potvrdi primku</Btn>
+        </div>
+      </Modal>}
+
+      {modal==='new-wh' && <Modal title="Novo skladište" onClose={()=>setModal(null)}>
+        <div style={{display:'grid',gap:14}}>
+          <Inp label="NAZIV *" {...inp('name')}/>
+          <Sel label="TIP" {...inp('type')}><option value="main">Glavno</option><option value="production">Produkcijsko</option><option value="finished">Gotovi proizvodi</option><option value="external">Vanjsko</option></Sel>
+          <Inp label="LOKACIJA" {...inp('location')}/>
+          <Btn onClick={save}><Check size={14}/> Spremi</Btn>
+        </div>
+      </Modal>}
     </div>
   )
 }

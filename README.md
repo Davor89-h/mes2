@@ -1,50 +1,136 @@
-import { useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { LANGUAGES } from '../i18n/index.js'
-import { C } from './UI'
+import { useState, useEffect, useCallback } from 'react'
+import { C, StatCard, Badge, Btn, Modal, Field, Sel, FGrid, FSel, TblWrap, TR, TD, Toast, useToast, Loading, EmptyState } from '../components/UI'
+import api from '../utils/api'
+import { useAuth } from '../context/AuthContext'
 
-export default function LanguageSwitcher({ compact = false }) {
-  const { i18n } = useTranslation()
-  const [open, setOpen] = useState(false)
-  const current = LANGUAGES.find(l => l.code === i18n.language) || LANGUAGES[0]
+const STATUS_COLOR = { in_machine:'teal', reserved:'yellow', transport:'blue', returned:'green', available:'gray' }
+const STATUS_LABEL = { in_machine:'U stroju', reserved:'Rezervirano', transport:'Transport', returned:'Vraćeno', available:'Slobodno', maintenance:'Servis' }
 
-  const change = (code) => {
-    i18n.changeLanguage(code)
-    localStorage.setItem('deer_lang', code)
-    setOpen(false)
+export default function UsageTrackingPage() {
+  const { user } = useAuth()
+  const [items, setItems] = useState([])
+  const [fixtures, setFixtures] = useState([])
+  const [machines, setMachines] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [statusF, setStatusF] = useState('')
+  const [modal, setModal] = useState(false)
+  const [form, setForm] = useState({ fixtureId:'', machineId:'', workOrder:'' })
+  const [saving, setSaving] = useState(false)
+  const [toast, showToast] = useToast()
+  const f = (k,v) => setForm(p=>({...p,[k]:v}))
+
+  const load = useCallback(async () => {
+    try {
+      const p = {}
+      if (statusF) p.status = statusF
+      const [u, fx, mc] = await Promise.all([
+        api.get('/usage', {params:p}),
+        api.get('/fixtures', {params:{status:'active'}}),
+        api.get('/machines'),
+      ])
+      setItems(u.data); setFixtures(fx.data); setMachines(mc.data)
+    } catch { setItems([]) }
+    finally { setLoading(false) }
+  }, [statusF])
+  useEffect(() => { load() }, [load])
+
+  const checkout = async () => {
+    if (!form.fixtureId) { showToast('Odaberi napravu!','error'); return }
+    setSaving(true)
+    try {
+      await api.post('/usage/checkout', form)
+      showToast('✓ Naprava preuzeta — u stroju'); setModal(false); load()
+    } catch(e) { showToast(e.response?.data?.error||'Greška','error') }
+    finally { setSaving(false) }
   }
 
-  return (
-    <div style={{ position:'relative' }}>
-      <button onClick={() => setOpen(o => !o)}
-        style={{ display:'flex',alignItems:'center',gap:6,padding:compact?'6px 10px':'8px 14px',borderRadius:9,border:`1px solid ${open?C.teal:C.border}`,background:open?`${C.teal}12`:C.surface3,color:open?C.teal:C.gray,fontSize:12,cursor:'pointer',transition:'all .2s',fontFamily:"'Chakra Petch',sans-serif" }}
-      >
-        <span style={{ fontSize:15 }}>{current.flag}</span>
-        {!compact && <span style={{ letterSpacing:0.5 }}>{current.code.toUpperCase()}</span>}
-        <span style={{ fontSize:9,color:C.muted2 }}>▾</span>
-      </button>
+  const returnFixture = async (id) => {
+    if (!confirm('Potvrditi povrat naprave?')) return
+    try { await api.patch(`/usage/${id}/return`); showToast('✓ Naprava vraćena'); load() }
+    catch { showToast('Greška','error') }
+  }
 
-      {open && (
-        <>
-          <div onClick={() => setOpen(false)} style={{ position:'fixed',inset:0,zIndex:299 }}/>
-          <div style={{ position:'absolute',top:'calc(100% + 6px)',right:0,zIndex:300,background:`linear-gradient(145deg,${C.surface},${C.surface2})`,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',boxShadow:`0 12px 32px rgba(0,0,0,.4)`,minWidth:160 }}>
-            {LANGUAGES.map(lang => (
-              <button key={lang.code} onClick={() => change(lang.code)}
-                style={{ width:'100%',display:'flex',alignItems:'center',gap:10,padding:'11px 16px',background:lang.code===i18n.language?`${C.teal}15`:'transparent',color:lang.code===i18n.language?C.teal:C.gray,border:'none',cursor:'pointer',fontSize:13,transition:'background .15s',fontFamily:"'Chakra Petch',sans-serif",borderLeft:lang.code===i18n.language?`3px solid ${C.teal}`:'3px solid transparent' }}
-                onMouseOver={e=>{if(lang.code!==i18n.language)e.currentTarget.style.background=C.surface3}}
-                onMouseOut={e=>{if(lang.code!==i18n.language)e.currentTarget.style.background='transparent'}}
-              >
-                <span style={{ fontSize:18 }}>{lang.flag}</span>
-                <div style={{ textAlign:'left' }}>
-                  <div style={{ fontSize:13,fontWeight:lang.code===i18n.language?600:400 }}>{lang.label}</div>
-                  <div style={{ fontSize:9,color:C.muted,letterSpacing:1 }}>{lang.code.toUpperCase()}</div>
-                </div>
-                {lang.code===i18n.language && <span style={{ marginLeft:'auto',color:C.teal,fontSize:12 }}>✓</span>}
-              </button>
-            ))}
-          </div>
-        </>
+  const active = items.filter(i=>i.status==='in_machine').length
+  const today = items.filter(i=>new Date(i.checkout_time).toDateString()===new Date().toDateString()).length
+
+  return (
+    <div>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:14, marginBottom:22 }}>
+        <StatCard label="Trenutno u stroju" value={active} color="orange"/>
+        <StatCard label="Preuzeto danas" value={today} color="teal"/>
+        <StatCard label="Ukupno evidencija" value={items.length} color="yellow"/>
+        <StatCard label="Slobodne naprave" value={fixtures.filter(f=>f.status==='active').length} color="green"/>
+      </div>
+
+      <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
+        <FSel value={statusF} onChange={e=>setStatusF(e.target.value)}>
+          <option value="">Svi statusi</option>
+          <option value="in_machine">U stroju</option>
+          <option value="reserved">Rezervirano</option>
+          <option value="returned">Vraćeno</option>
+        </FSel>
+        <Btn onClick={()=>{setForm({fixtureId:'',machineId:'',workOrder:''});setModal(true)}} style={{marginLeft:'auto'}}>
+          + Preuzmi napravu
+        </Btn>
+      </div>
+
+      {loading ? <Loading/> : !items.length ? <EmptyState icon="⟳" text="Nema evidencija korištenja."/> : (
+        <TblWrap headers={['Naprava','Operater','Stroj','Radni nalog','Preuzeto','Vraćeno','Status','']}>
+          {items.map(it=>(
+            <TR key={it.id}>
+              <TD>
+                <div style={{ fontWeight:600,color:'#e8f0ee',fontSize:13 }}>{it.fixture_name}</div>
+                <div style={{ fontSize:10,color:C.muted2,fontFamily:'monospace' }}>{it.fixture_internal_id||''}</div>
+              </TD>
+              <TD muted>{it.operator_name||'—'}</TD>
+              <TD><span style={{ color:C.teal }}>{it.machine_name||'—'}</span></TD>
+              <TD mono muted>{it.work_order||'—'}</TD>
+              <TD muted style={{ fontSize:11 }}>{it.checkout_time?new Date(it.checkout_time).toLocaleString('hr-HR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'—'}</TD>
+              <TD muted style={{ fontSize:11 }}>{it.return_time?new Date(it.return_time).toLocaleString('hr-HR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'—'}</TD>
+              <TD><Badge type={STATUS_COLOR[it.status]||'gray'}>{STATUS_LABEL[it.status]||it.status}</Badge></TD>
+              <TD>
+                {it.status==='in_machine'&&(
+                  <Btn sm v="teal" onClick={()=>returnFixture(it.id)}>Povrat ↩</Btn>
+                )}
+              </TD>
+            </TR>
+          ))}
+        </TblWrap>
       )}
+
+      <Modal open={modal} onClose={()=>setModal(false)} title="Preuzimanje naprave" width={480}>
+        <FGrid cols={1}>
+          <Field label="Naprava" req>
+            <Sel value={form.fixtureId} onChange={e=>f('fixtureId',e.target.value)}>
+              <option value="">— Odaberi napravu —</option>
+              {fixtures.filter(f=>f.status==='active').map(fx=>(
+                <option key={fx.id} value={fx.id}>{fx.name} {fx.internal_id?`(${fx.internal_id})`:''}</option>
+              ))}
+            </Sel>
+          </Field>
+          <Field label="Stroj">
+            <Sel value={form.machineId} onChange={e=>f('machineId',e.target.value)}>
+              <option value="">— Odaberi stroj —</option>
+              {machines.map(m=>(
+                <option key={m.id} value={m.id}>{m.name} {m.machine_id?`(${m.machine_id})`:''}</option>
+              ))}
+            </Sel>
+          </Field>
+          <Field label="Radni nalog">
+            <input value={form.workOrder} onChange={e=>f('workOrder',e.target.value)} placeholder="npr. RN-2025-001"
+              style={{ background:C.surface2,border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 14px',color:C.gray,fontSize:13,outline:'none',width:'100%' }}
+              onFocus={e=>e.target.style.borderColor=C.teal} onBlur={e=>e.target.style.borderColor=C.border}/>
+          </Field>
+        </FGrid>
+        <div style={{ marginTop:16,padding:'10px 14px',background:`${C.teal}09`,border:`1px solid ${C.teal}22`,borderRadius:10,fontSize:12,color:C.muted2 }}>
+          Operater: <strong style={{ color:C.teal }}>{user?.firstName} {user?.lastName}</strong>
+        </div>
+        <div style={{ display:'flex',gap:10,justifyContent:'flex-end',marginTop:22 }}>
+          <Btn v="secondary" onClick={()=>setModal(false)}>Odustani</Btn>
+          <Btn onClick={checkout} disabled={saving}>{saving?'Sprema...':'Preuzmi napravu'}</Btn>
+        </div>
+      </Modal>
+      <Toast {...toast}/>
     </div>
   )
 }

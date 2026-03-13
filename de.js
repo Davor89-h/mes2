@@ -1,1184 +1,2776 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { useTranslation } from 'react-i18next'
-import { C,StatCard,Badge,StatusBadge,QtyBar,Btn,Modal,Field,Inp,Sel,FGrid,SearchBar,FSel,TblWrap,TR,TD,RowActions,Toast,useToast,HistoryModal,QtyAdjModal,Loading,EmptyState,SectionTitle } from '../components/UI'
-import AdvancedFilter from '../components/AdvancedFilter'
-import ExcelBar from '../components/ExcelBar'
-import api from '../utils/api'
-import { useAuth } from '../context/AuthContext'
-import { mapToolToExcel } from '../utils/excel'
-
-// ─── Constants ──────────────────────────────────────────────────────────────
-const CATS = ['Glodalo','Svrdlo','Stega','Brusna ploča','Tokarenje','Mjerilo','Bušilica','Rezač','Ostalo']
-const PURS = ['Gruba obrada','Fina obrada','Bušenje','Glodanje','Brušenje','Kontrola','Prihvat','Tokarenje','Rezanje']
-const UNITS = ['kom','par','set','m','kg']
-const CAT_ICON = { 'Glodalo':'⚙','Svrdlo':'⬡','Stega':'⬢','Brusna ploča':'◉','Tokarenje':'◈','Mjerilo':'≡','Bušilica':'⬛','Rezač':'◆' }
-const CAT_COLOR = { 'Glodalo':'#51FFFF','Svrdlo':'#F5BC54','Stega':'#60A5FA','Brusna ploča':'#FB923C','Tokarenje':'#4ADE80','Mjerilo':'#C8DDD9','Bušilica':'#F87171','Rezač':'#51FFFF' }
-
-const EMPTY = {
-  internalId:'', name:'', category:'', purpose:'', dimensions:'', connectionType:'',
-  storageLocation:'', currentQuantity:0, minQuantity:1, minOrderQuantity:1,
-  projectedLifespanDays:'', unitPrice:'', supplier:'', supplierContact:'',
-  machineApplicability:'', notes:'', unit:'kom',
-  requiresCalibration:false, calibrationIntervalDays:'', serviceIntervalDays:''
-}
-const EMPTY_FILTER = { category:'', status:'', qtyMin:'', qtyMax:'', location:'', supplier:'' }
-
-// ─── Helpers ────────────────────────────────────────────────────────────────
-const ago = (d) => { const diff=Math.round((Date.now()-new Date(d))/60000); return diff<1?'upravo':diff<60?diff+'m':diff<1440?Math.round(diff/60)+'h':Math.round(diff/1440)+'d' }
-const rokColor = (d) => !d?'#5A8480':d<20?'#F87171':d<45?'#FB923C':'#5A8480'
-const calibColor = (d) => {
-  if (!d) return '#F87171'
-  const days = Math.round((new Date(d) - new Date()) / 86400000)
-  return days < 0 ? '#F87171' : days < 7 ? '#FB923C' : days < 30 ? '#F5BC54' : '#4ADE80'
-}
-const calibDays = (d) => {
-  if (!d) return 'Nije zakazana'
-  const days = Math.round((new Date(d) - new Date()) / 86400000)
-  if (days < 0) return `Kasni ${Math.abs(days)} d`
-  if (days === 0) return 'Danas'
-  return `Za ${days} d`
-}
-
-// ─── QR Code generator (uses canvas, no lib needed) ─────────────────────────
-function generateQRDataURL(text) {
-  // Simple QR-like visual using canvas - for real QR use qrcode lib after npm install
-  return new Promise((resolve) => {
-    try {
-      const QRCode = window.QRCode
-      if (QRCode) {
-        const canvas = document.createElement('canvas')
-        QRCode.toCanvas(canvas, text, { width: 200 }, (err) => {
-          resolve(err ? null : canvas.toDataURL())
-        })
-        return
+{
+  "name": "deer-mes-frontend",
+  "version": "6.0.0",
+  "lockfileVersion": 3,
+  "requires": true,
+  "packages": {
+    "": {
+      "name": "deer-mes-frontend",
+      "version": "6.0.0",
+      "dependencies": {
+        "axios": "^1.6.0",
+        "i18next": "^23.7.0",
+        "jspdf": "^2.5.1",
+        "jspdf-autotable": "^3.8.2",
+        "lucide-react": "^0.263.1",
+        "react": "^18.2.0",
+        "react-dom": "^18.2.0",
+        "react-i18next": "^13.5.0",
+        "react-router-dom": "^6.20.0",
+        "recharts": "^2.10.0",
+        "three": "^0.160.0",
+        "xlsx": "^0.18.5"
+      },
+      "devDependencies": {
+        "@vitejs/plugin-react": "^4.2.0",
+        "vite": "^5.0.0"
       }
-    } catch(e) {}
-    // Fallback: canvas barcode-style visual
-    const canvas = document.createElement('canvas')
-    canvas.width = 200; canvas.height = 200
-    const ctx = canvas.getContext('2d')
-    ctx.fillStyle = '#fff'; ctx.fillRect(0,0,200,200)
-    ctx.fillStyle = '#000'
-    // Draw simple pattern based on text hash
-    let hash = 0
-    for (let i=0; i<text.length; i++) hash = ((hash<<5)-hash)+text.charCodeAt(i)
-    const size = 10
-    for (let r=0; r<20; r++) {
-      for (let c=0; c<20; c++) {
-        if ((hash ^ (r*17+c*13)) & 1) ctx.fillRect(c*size, r*size, size, size)
+    },
+    "node_modules/@babel/code-frame": {
+      "version": "7.29.0",
+      "resolved": "https://registry.npmjs.org/@babel/code-frame/-/code-frame-7.29.0.tgz",
+      "integrity": "sha512-9NhCeYjq9+3uxgdtp20LSiJXJvN0FeCtNGpJxuMFZ1Kv3cWUNb6DOhJwUvcVCzKGR66cw4njwM6hrJLqgOwbcw==",
+      "dev": true,
+      "license": "MIT",
+      "dependencies": {
+        "@babel/helper-validator-identifier": "^7.28.5",
+        "js-tokens": "^4.0.0",
+        "picocolors": "^1.1.1"
+      },
+      "engines": {
+        "node": ">=6.9.0"
       }
-    }
-    ctx.strokeStyle = '#000'; ctx.lineWidth = 3; ctx.strokeRect(2,2,196,196)
-    resolve(canvas.toDataURL())
-  })
-}
-
-// ─── PDF Export ──────────────────────────────────────────────────────────────
-async function exportToolsPDF(tools, stats) {
-  try {
-    const { jsPDF } = await import('jspdf')
-    const { default: autoTable } = await import('jspdf-autotable')
-    const doc = new jsPDF({ orientation:'landscape', unit:'mm' })
-    
-    // Header
-    doc.setFillColor(36, 51, 48)
-    doc.rect(0, 0, 297, 25, 'F')
-    doc.setTextColor(245, 188, 84)
-    doc.setFontSize(18)
-    doc.setFont('helvetica', 'bold')
-    doc.text('DEER MES — Alatnica', 14, 16)
-    doc.setTextColor(200, 221, 217)
-    doc.setFontSize(9)
-    doc.text(`Izvoz: ${new Date().toLocaleString('hr-HR')}`, 220, 16)
-    
-    // Stats row
-    doc.setTextColor(36, 51, 48)
-    doc.setFillColor(245, 188, 84)
-    doc.roundedRect(14, 30, 55, 14, 2, 2, 'F')
-    doc.setFontSize(8); doc.setFont('helvetica','bold')
-    doc.text(`Ukupno: ${stats.total}`, 16, 38)
-    doc.text(`Dostupni: ${stats.available}  Niske zalihe: ${stats.low}  Kritično: ${stats.critical}`, 16, 43)
-    
-    doc.setTextColor(36, 51, 48)
-    autoTable(doc, {
-      startY: 50,
-      head: [['Naziv alata','ID','Kategorija','Namjena','Dimenzije','Lokacija','Kol.','Min.','Status','Dobavljač','Cijena','Rok (d)']],
-      body: tools.map(t => [
-        t.name, t.internal_id||'—', t.category||'—', t.purpose||'—', t.dimensions||'—',
-        t.storage_location||'—', t.current_quantity, t.min_quantity,
-        t.status, t.supplier||'—',
-        t.unit_price ? parseFloat(t.unit_price).toFixed(2)+'€' : '—',
-        t.projected_lifespan_days||'—'
-      ]),
-      headStyles: { fillColor: [36,51,48], textColor: [245,188,84], fontStyle:'bold', fontSize:7 },
-      bodyStyles: { fontSize:7 },
-      alternateRowStyles: { fillColor: [240,248,245] },
-      columnStyles: { 6:{halign:'center'}, 7:{halign:'center'}, 8:{halign:'center'} },
-      didParseCell: (data) => {
-        if (data.section === 'body' && data.column.index === 8) {
-          if (data.cell.raw === 'Kritično') data.cell.styles.textColor = [248, 113, 113]
-          else if (data.cell.raw === 'Niske zalihe') data.cell.styles.textColor = [251, 146, 60]
-          else data.cell.styles.textColor = [74, 222, 128]
+    },
+    "node_modules/@babel/compat-data": {
+      "version": "7.29.0",
+      "resolved": "https://registry.npmjs.org/@babel/compat-data/-/compat-data-7.29.0.tgz",
+      "integrity": "sha512-T1NCJqT/j9+cn8fvkt7jtwbLBfLC/1y1c7NtCeXFRgzGTsafi68MRv8yzkYSapBnFA6L3U2VSc02ciDzoAJhJg==",
+      "dev": true,
+      "license": "MIT",
+      "engines": {
+        "node": ">=6.9.0"
+      }
+    },
+    "node_modules/@babel/core": {
+      "version": "7.29.0",
+      "resolved": "https://registry.npmjs.org/@babel/core/-/core-7.29.0.tgz",
+      "integrity": "sha512-CGOfOJqWjg2qW/Mb6zNsDm+u5vFQ8DxXfbM09z69p5Z6+mE1ikP2jUXw+j42Pf1XTYED2Rni5f95npYeuwMDQA==",
+      "dev": true,
+      "license": "MIT",
+      "dependencies": {
+        "@babel/code-frame": "^7.29.0",
+        "@babel/generator": "^7.29.0",
+        "@babel/helper-compilation-targets": "^7.28.6",
+        "@babel/helper-module-transforms": "^7.28.6",
+        "@babel/helpers": "^7.28.6",
+        "@babel/parser": "^7.29.0",
+        "@babel/template": "^7.28.6",
+        "@babel/traverse": "^7.29.0",
+        "@babel/types": "^7.29.0",
+        "@jridgewell/remapping": "^2.3.5",
+        "convert-source-map": "^2.0.0",
+        "debug": "^4.1.0",
+        "gensync": "^1.0.0-beta.2",
+        "json5": "^2.2.3",
+        "semver": "^6.3.1"
+      },
+      "engines": {
+        "node": ">=6.9.0"
+      },
+      "funding": {
+        "type": "opencollective",
+        "url": "https://opencollective.com/babel"
+      }
+    },
+    "node_modules/@babel/generator": {
+      "version": "7.29.1",
+      "resolved": "https://registry.npmjs.org/@babel/generator/-/generator-7.29.1.tgz",
+      "integrity": "sha512-qsaF+9Qcm2Qv8SRIMMscAvG4O3lJ0F1GuMo5HR/Bp02LopNgnZBC/EkbevHFeGs4ls/oPz9v+Bsmzbkbe+0dUw==",
+      "dev": true,
+      "license": "MIT",
+      "dependencies": {
+        "@babel/parser": "^7.29.0",
+        "@babel/types": "^7.29.0",
+        "@jridgewell/gen-mapping": "^0.3.12",
+        "@jridgewell/trace-mapping": "^0.3.28",
+        "jsesc": "^3.0.2"
+      },
+      "engines": {
+        "node": ">=6.9.0"
+      }
+    },
+    "node_modules/@babel/helper-compilation-targets": {
+      "version": "7.28.6",
+      "resolved": "https://registry.npmjs.org/@babel/helper-compilation-targets/-/helper-compilation-targets-7.28.6.tgz",
+      "integrity": "sha512-JYtls3hqi15fcx5GaSNL7SCTJ2MNmjrkHXg4FSpOA/grxK8KwyZ5bubHsCq8FXCkua6xhuaaBit+3b7+VZRfcA==",
+      "dev": true,
+      "license": "MIT",
+      "dependencies": {
+        "@babel/compat-data": "^7.28.6",
+        "@babel/helper-validator-option": "^7.27.1",
+        "browserslist": "^4.24.0",
+        "lru-cache": "^5.1.1",
+        "semver": "^6.3.1"
+      },
+      "engines": {
+        "node": ">=6.9.0"
+      }
+    },
+    "node_modules/@babel/helper-globals": {
+      "version": "7.28.0",
+      "resolved": "https://registry.npmjs.org/@babel/helper-globals/-/helper-globals-7.28.0.tgz",
+      "integrity": "sha512-+W6cISkXFa1jXsDEdYA8HeevQT/FULhxzR99pxphltZcVaugps53THCeiWA8SguxxpSp3gKPiuYfSWopkLQ4hw==",
+      "dev": true,
+      "license": "MIT",
+      "engines": {
+        "node": ">=6.9.0"
+      }
+    },
+    "node_modules/@babel/helper-module-imports": {
+      "version": "7.28.6",
+      "resolved": "https://registry.npmjs.org/@babel/helper-module-imports/-/helper-module-imports-7.28.6.tgz",
+      "integrity": "sha512-l5XkZK7r7wa9LucGw9LwZyyCUscb4x37JWTPz7swwFE/0FMQAGpiWUZn8u9DzkSBWEcK25jmvubfpw2dnAMdbw==",
+      "dev": true,
+      "license": "MIT",
+      "dependencies": {
+        "@babel/traverse": "^7.28.6",
+        "@babel/types": "^7.28.6"
+      },
+      "engines": {
+        "node": ">=6.9.0"
+      }
+    },
+    "node_modules/@babel/helper-module-transforms": {
+      "version": "7.28.6",
+      "resolved": "https://registry.npmjs.org/@babel/helper-module-transforms/-/helper-module-transforms-7.28.6.tgz",
+      "integrity": "sha512-67oXFAYr2cDLDVGLXTEABjdBJZ6drElUSI7WKp70NrpyISso3plG9SAGEF6y7zbha/wOzUByWWTJvEDVNIUGcA==",
+      "dev": true,
+      "license": "MIT",
+      "dependencies": {
+        "@babel/helper-module-imports": "^7.28.6",
+        "@babel/helper-validator-identifier": "^7.28.5",
+        "@babel/traverse": "^7.28.6"
+      },
+      "engines": {
+        "node": ">=6.9.0"
+      },
+      "peerDependencies": {
+        "@babel/core": "^7.0.0"
+      }
+    },
+    "node_modules/@babel/helper-plugin-utils": {
+      "version": "7.28.6",
+      "resolved": "https://registry.npmjs.org/@babel/helper-plugin-utils/-/helper-plugin-utils-7.28.6.tgz",
+      "integrity": "sha512-S9gzZ/bz83GRysI7gAD4wPT/AI3uCnY+9xn+Mx/KPs2JwHJIz1W8PZkg2cqyt3RNOBM8ejcXhV6y8Og7ly/Dug==",
+      "dev": true,
+      "license": "MIT",
+      "engines": {
+        "node": ">=6.9.0"
+      }
+    },
+    "node_modules/@babel/helper-string-parser": {
+      "version": "7.27.1",
+      "resolved": "https://registry.npmjs.org/@babel/helper-string-parser/-/helper-string-parser-7.27.1.tgz",
+      "integrity": "sha512-qMlSxKbpRlAridDExk92nSobyDdpPijUq2DW6oDnUqd0iOGxmQjyqhMIihI9+zv4LPyZdRje2cavWPbCbWm3eA==",
+      "dev": true,
+      "license": "MIT",
+      "engines": {
+        "node": ">=6.9.0"
+      }
+    },
+    "node_modules/@babel/helper-validator-identifier": {
+      "version": "7.28.5",
+      "resolved": "https://registry.npmjs.org/@babel/helper-validator-identifier/-/helper-validator-identifier-7.28.5.tgz",
+      "integrity": "sha512-qSs4ifwzKJSV39ucNjsvc6WVHs6b7S03sOh2OcHF9UHfVPqWWALUsNUVzhSBiItjRZoLHx7nIarVjqKVusUZ1Q==",
+      "dev": true,
+      "license": "MIT",
+      "engines": {
+        "node": ">=6.9.0"
+      }
+    },
+    "node_modules/@babel/helper-validator-option": {
+      "version": "7.27.1",
+      "resolved": "https://registry.npmjs.org/@babel/helper-validator-option/-/helper-validator-option-7.27.1.tgz",
+      "integrity": "sha512-YvjJow9FxbhFFKDSuFnVCe2WxXk1zWc22fFePVNEaWJEu8IrZVlda6N0uHwzZrUM1il7NC9Mlp4MaJYbYd9JSg==",
+      "dev": true,
+      "license": "MIT",
+      "engines": {
+        "node": ">=6.9.0"
+      }
+    },
+    "node_modules/@babel/helpers": {
+      "version": "7.28.6",
+      "resolved": "https://registry.npmjs.org/@babel/helpers/-/helpers-7.28.6.tgz",
+      "integrity": "sha512-xOBvwq86HHdB7WUDTfKfT/Vuxh7gElQ+Sfti2Cy6yIWNW05P8iUslOVcZ4/sKbE+/jQaukQAdz/gf3724kYdqw==",
+      "dev": true,
+      "license": "MIT",
+      "dependencies": {
+        "@babel/template": "^7.28.6",
+        "@babel/types": "^7.28.6"
+      },
+      "engines": {
+        "node": ">=6.9.0"
+      }
+    },
+    "node_modules/@babel/parser": {
+      "version": "7.29.0",
+      "resolved": "https://registry.npmjs.org/@babel/parser/-/parser-7.29.0.tgz",
+      "integrity": "sha512-IyDgFV5GeDUVX4YdF/3CPULtVGSXXMLh1xVIgdCgxApktqnQV0r7/8Nqthg+8YLGaAtdyIlo2qIdZrbCv4+7ww==",
+      "dev": true,
+      "license": "MIT",
+      "dependencies": {
+        "@babel/types": "^7.29.0"
+      },
+      "bin": {
+        "parser": "bin/babel-parser.js"
+      },
+      "engines": {
+        "node": ">=6.0.0"
+      }
+    },
+    "node_modules/@babel/plugin-transform-react-jsx-self": {
+      "version": "7.27.1",
+      "resolved": "https://registry.npmjs.org/@babel/plugin-transform-react-jsx-self/-/plugin-transform-react-jsx-self-7.27.1.tgz",
+      "integrity": "sha512-6UzkCs+ejGdZ5mFFC/OCUrv028ab2fp1znZmCZjAOBKiBK2jXD1O+BPSfX8X2qjJ75fZBMSnQn3Rq2mrBJK2mw==",
+      "dev": true,
+      "license": "MIT",
+      "dependencies": {
+        "@babel/helper-plugin-utils": "^7.27.1"
+      },
+      "engines": {
+        "node": ">=6.9.0"
+      },
+      "peerDependencies": {
+        "@babel/core": "^7.0.0-0"
+      }
+    },
+    "node_modules/@babel/plugin-transform-react-jsx-source": {
+      "version": "7.27.1",
+      "resolved": "https://registry.npmjs.org/@babel/plugin-transform-react-jsx-source/-/plugin-transform-react-jsx-source-7.27.1.tgz",
+      "integrity": "sha512-zbwoTsBruTeKB9hSq73ha66iFeJHuaFkUbwvqElnygoNbj/jHRsSeokowZFN3CZ64IvEqcmmkVe89OPXc7ldAw==",
+      "dev": true,
+      "license": "MIT",
+      "dependencies": {
+        "@babel/helper-plugin-utils": "^7.27.1"
+      },
+      "engines": {
+        "node": ">=6.9.0"
+      },
+      "peerDependencies": {
+        "@babel/core": "^7.0.0-0"
+      }
+    },
+    "node_modules/@babel/runtime": {
+      "version": "7.28.6",
+      "resolved": "https://registry.npmjs.org/@babel/runtime/-/runtime-7.28.6.tgz",
+      "integrity": "sha512-05WQkdpL9COIMz4LjTxGpPNCdlpyimKppYNoJ5Di5EUObifl8t4tuLuUBBZEpoLYOmfvIWrsp9fCl0HoPRVTdA==",
+      "license": "MIT",
+      "engines": {
+        "node": ">=6.9.0"
+      }
+    },
+    "node_modules/@babel/template": {
+      "version": "7.28.6",
+      "resolved": "https://registry.npmjs.org/@babel/template/-/template-7.28.6.tgz",
+      "integrity": "sha512-YA6Ma2KsCdGb+WC6UpBVFJGXL58MDA6oyONbjyF/+5sBgxY/dwkhLogbMT2GXXyU84/IhRw/2D1Os1B/giz+BQ==",
+      "dev": true,
+      "license": "MIT",
+      "dependencies": {
+        "@babel/code-frame": "^7.28.6",
+        "@babel/parser": "^7.28.6",
+        "@babel/types": "^7.28.6"
+      },
+      "engines": {
+        "node": ">=6.9.0"
+      }
+    },
+    "node_modules/@babel/traverse": {
+      "version": "7.29.0",
+      "resolved": "https://registry.npmjs.org/@babel/traverse/-/traverse-7.29.0.tgz",
+      "integrity": "sha512-4HPiQr0X7+waHfyXPZpWPfWL/J7dcN1mx9gL6WdQVMbPnF3+ZhSMs8tCxN7oHddJE9fhNE7+lxdnlyemKfJRuA==",
+      "dev": true,
+      "license": "MIT",
+      "dependencies": {
+        "@babel/code-frame": "^7.29.0",
+        "@babel/generator": "^7.29.0",
+        "@babel/helper-globals": "^7.28.0",
+        "@babel/parser": "^7.29.0",
+        "@babel/template": "^7.28.6",
+        "@babel/types": "^7.29.0",
+        "debug": "^4.3.1"
+      },
+      "engines": {
+        "node": ">=6.9.0"
+      }
+    },
+    "node_modules/@babel/types": {
+      "version": "7.29.0",
+      "resolved": "https://registry.npmjs.org/@babel/types/-/types-7.29.0.tgz",
+      "integrity": "sha512-LwdZHpScM4Qz8Xw2iKSzS+cfglZzJGvofQICy7W7v4caru4EaAmyUuO6BGrbyQ2mYV11W0U8j5mBhd14dd3B0A==",
+      "dev": true,
+      "license": "MIT",
+      "dependencies": {
+        "@babel/helper-string-parser": "^7.27.1",
+        "@babel/helper-validator-identifier": "^7.28.5"
+      },
+      "engines": {
+        "node": ">=6.9.0"
+      }
+    },
+    "node_modules/@esbuild/aix-ppc64": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/aix-ppc64/-/aix-ppc64-0.21.5.tgz",
+      "integrity": "sha512-1SDgH6ZSPTlggy1yI6+Dbkiz8xzpHJEVAlF/AM1tHPLsf5STom9rwtjE4hKAF20FfXXNTFqEYXyJNWh1GiZedQ==",
+      "cpu": [
+        "ppc64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "aix"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/android-arm": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/android-arm/-/android-arm-0.21.5.tgz",
+      "integrity": "sha512-vCPvzSjpPHEi1siZdlvAlsPxXl7WbOVUBBAowWug4rJHb68Ox8KualB+1ocNvT5fjv6wpkX6o/iEpbDrf68zcg==",
+      "cpu": [
+        "arm"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "android"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/android-arm64": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/android-arm64/-/android-arm64-0.21.5.tgz",
+      "integrity": "sha512-c0uX9VAUBQ7dTDCjq+wdyGLowMdtR/GoC2U5IYk/7D1H1JYC0qseD7+11iMP2mRLN9RcCMRcjC4YMclCzGwS/A==",
+      "cpu": [
+        "arm64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "android"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/android-x64": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/android-x64/-/android-x64-0.21.5.tgz",
+      "integrity": "sha512-D7aPRUUNHRBwHxzxRvp856rjUHRFW1SdQATKXH2hqA0kAZb1hKmi02OpYRacl0TxIGz/ZmXWlbZgjwWYaCakTA==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "android"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/darwin-arm64": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/darwin-arm64/-/darwin-arm64-0.21.5.tgz",
+      "integrity": "sha512-DwqXqZyuk5AiWWf3UfLiRDJ5EDd49zg6O9wclZ7kUMv2WRFr4HKjXp/5t8JZ11QbQfUS6/cRCKGwYhtNAY88kQ==",
+      "cpu": [
+        "arm64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "darwin"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/darwin-x64": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/darwin-x64/-/darwin-x64-0.21.5.tgz",
+      "integrity": "sha512-se/JjF8NlmKVG4kNIuyWMV/22ZaerB+qaSi5MdrXtd6R08kvs2qCN4C09miupktDitvh8jRFflwGFBQcxZRjbw==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "darwin"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/freebsd-arm64": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/freebsd-arm64/-/freebsd-arm64-0.21.5.tgz",
+      "integrity": "sha512-5JcRxxRDUJLX8JXp/wcBCy3pENnCgBR9bN6JsY4OmhfUtIHe3ZW0mawA7+RDAcMLrMIZaf03NlQiX9DGyB8h4g==",
+      "cpu": [
+        "arm64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "freebsd"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/freebsd-x64": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/freebsd-x64/-/freebsd-x64-0.21.5.tgz",
+      "integrity": "sha512-J95kNBj1zkbMXtHVH29bBriQygMXqoVQOQYA+ISs0/2l3T9/kj42ow2mpqerRBxDJnmkUDCaQT/dfNXWX/ZZCQ==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "freebsd"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/linux-arm": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/linux-arm/-/linux-arm-0.21.5.tgz",
+      "integrity": "sha512-bPb5AHZtbeNGjCKVZ9UGqGwo8EUu4cLq68E95A53KlxAPRmUyYv2D6F0uUI65XisGOL1hBP5mTronbgo+0bFcA==",
+      "cpu": [
+        "arm"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/linux-arm64": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/linux-arm64/-/linux-arm64-0.21.5.tgz",
+      "integrity": "sha512-ibKvmyYzKsBeX8d8I7MH/TMfWDXBF3db4qM6sy+7re0YXya+K1cem3on9XgdT2EQGMu4hQyZhan7TeQ8XkGp4Q==",
+      "cpu": [
+        "arm64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/linux-ia32": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/linux-ia32/-/linux-ia32-0.21.5.tgz",
+      "integrity": "sha512-YvjXDqLRqPDl2dvRODYmmhz4rPeVKYvppfGYKSNGdyZkA01046pLWyRKKI3ax8fbJoK5QbxblURkwK/MWY18Tg==",
+      "cpu": [
+        "ia32"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/linux-loong64": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/linux-loong64/-/linux-loong64-0.21.5.tgz",
+      "integrity": "sha512-uHf1BmMG8qEvzdrzAqg2SIG/02+4/DHB6a9Kbya0XDvwDEKCoC8ZRWI5JJvNdUjtciBGFQ5PuBlpEOXQj+JQSg==",
+      "cpu": [
+        "loong64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/linux-mips64el": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/linux-mips64el/-/linux-mips64el-0.21.5.tgz",
+      "integrity": "sha512-IajOmO+KJK23bj52dFSNCMsz1QP1DqM6cwLUv3W1QwyxkyIWecfafnI555fvSGqEKwjMXVLokcV5ygHW5b3Jbg==",
+      "cpu": [
+        "mips64el"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/linux-ppc64": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/linux-ppc64/-/linux-ppc64-0.21.5.tgz",
+      "integrity": "sha512-1hHV/Z4OEfMwpLO8rp7CvlhBDnjsC3CttJXIhBi+5Aj5r+MBvy4egg7wCbe//hSsT+RvDAG7s81tAvpL2XAE4w==",
+      "cpu": [
+        "ppc64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/linux-riscv64": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/linux-riscv64/-/linux-riscv64-0.21.5.tgz",
+      "integrity": "sha512-2HdXDMd9GMgTGrPWnJzP2ALSokE/0O5HhTUvWIbD3YdjME8JwvSCnNGBnTThKGEB91OZhzrJ4qIIxk/SBmyDDA==",
+      "cpu": [
+        "riscv64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/linux-s390x": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/linux-s390x/-/linux-s390x-0.21.5.tgz",
+      "integrity": "sha512-zus5sxzqBJD3eXxwvjN1yQkRepANgxE9lgOW2qLnmr8ikMTphkjgXu1HR01K4FJg8h1kEEDAqDcZQtbrRnB41A==",
+      "cpu": [
+        "s390x"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/linux-x64": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/linux-x64/-/linux-x64-0.21.5.tgz",
+      "integrity": "sha512-1rYdTpyv03iycF1+BhzrzQJCdOuAOtaqHTWJZCWvijKD2N5Xu0TtVC8/+1faWqcP9iBCWOmjmhoH94dH82BxPQ==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/netbsd-x64": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/netbsd-x64/-/netbsd-x64-0.21.5.tgz",
+      "integrity": "sha512-Woi2MXzXjMULccIwMnLciyZH4nCIMpWQAs049KEeMvOcNADVxo0UBIQPfSmxB3CWKedngg7sWZdLvLczpe0tLg==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "netbsd"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/openbsd-x64": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/openbsd-x64/-/openbsd-x64-0.21.5.tgz",
+      "integrity": "sha512-HLNNw99xsvx12lFBUwoT8EVCsSvRNDVxNpjZ7bPn947b8gJPzeHWyNVhFsaerc0n3TsbOINvRP2byTZ5LKezow==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "openbsd"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/sunos-x64": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/sunos-x64/-/sunos-x64-0.21.5.tgz",
+      "integrity": "sha512-6+gjmFpfy0BHU5Tpptkuh8+uw3mnrvgs+dSPQXQOv3ekbordwnzTVEb4qnIvQcYXq6gzkyTnoZ9dZG+D4garKg==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "sunos"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/win32-arm64": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/win32-arm64/-/win32-arm64-0.21.5.tgz",
+      "integrity": "sha512-Z0gOTd75VvXqyq7nsl93zwahcTROgqvuAcYDUr+vOv8uHhNSKROyU961kgtCD1e95IqPKSQKH7tBTslnS3tA8A==",
+      "cpu": [
+        "arm64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "win32"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/win32-ia32": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/win32-ia32/-/win32-ia32-0.21.5.tgz",
+      "integrity": "sha512-SWXFF1CL2RVNMaVs+BBClwtfZSvDgtL//G/smwAc5oVK/UPu2Gu9tIaRgFmYFFKrmg3SyAjSrElf0TiJ1v8fYA==",
+      "cpu": [
+        "ia32"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "win32"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/win32-x64": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/@esbuild/win32-x64/-/win32-x64-0.21.5.tgz",
+      "integrity": "sha512-tQd/1efJuzPC6rCFwEvLtci/xNFcTZknmXs98FYDfGE4wP9ClFV98nyKrzJKVPMhdDnjzLhdUyMX4PsQAPjwIw==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "win32"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@jridgewell/gen-mapping": {
+      "version": "0.3.13",
+      "resolved": "https://registry.npmjs.org/@jridgewell/gen-mapping/-/gen-mapping-0.3.13.tgz",
+      "integrity": "sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA==",
+      "dev": true,
+      "license": "MIT",
+      "dependencies": {
+        "@jridgewell/sourcemap-codec": "^1.5.0",
+        "@jridgewell/trace-mapping": "^0.3.24"
+      }
+    },
+    "node_modules/@jridgewell/remapping": {
+      "version": "2.3.5",
+      "resolved": "https://registry.npmjs.org/@jridgewell/remapping/-/remapping-2.3.5.tgz",
+      "integrity": "sha512-LI9u/+laYG4Ds1TDKSJW2YPrIlcVYOwi2fUC6xB43lueCjgxV4lffOCZCtYFiH6TNOX+tQKXx97T4IKHbhyHEQ==",
+      "dev": true,
+      "license": "MIT",
+      "dependencies": {
+        "@jridgewell/gen-mapping": "^0.3.5",
+        "@jridgewell/trace-mapping": "^0.3.24"
+      }
+    },
+    "node_modules/@jridgewell/resolve-uri": {
+      "version": "3.1.2",
+      "resolved": "https://registry.npmjs.org/@jridgewell/resolve-uri/-/resolve-uri-3.1.2.tgz",
+      "integrity": "sha512-bRISgCIjP20/tbWSPWMEi54QVPRZExkuD9lJL+UIxUKtwVJA8wW1Trb1jMs1RFXo1CBTNZ/5hpC9QvmKWdopKw==",
+      "dev": true,
+      "license": "MIT",
+      "engines": {
+        "node": ">=6.0.0"
+      }
+    },
+    "node_modules/@jridgewell/sourcemap-codec": {
+      "version": "1.5.5",
+      "resolved": "https://registry.npmjs.org/@jridgewell/sourcemap-codec/-/sourcemap-codec-1.5.5.tgz",
+      "integrity": "sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og==",
+      "dev": true,
+      "license": "MIT"
+    },
+    "node_modules/@jridgewell/trace-mapping": {
+      "version": "0.3.31",
+      "resolved": "https://registry.npmjs.org/@jridgewell/trace-mapping/-/trace-mapping-0.3.31.tgz",
+      "integrity": "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==",
+      "dev": true,
+      "license": "MIT",
+      "dependencies": {
+        "@jridgewell/resolve-uri": "^3.1.0",
+        "@jridgewell/sourcemap-codec": "^1.4.14"
+      }
+    },
+    "node_modules/@remix-run/router": {
+      "version": "1.23.2",
+      "resolved": "https://registry.npmjs.org/@remix-run/router/-/router-1.23.2.tgz",
+      "integrity": "sha512-Ic6m2U/rMjTkhERIa/0ZtXJP17QUi2CbWE7cqx4J58M8aA3QTfW+2UlQ4psvTX9IO1RfNVhK3pcpdjej7L+t2w==",
+      "license": "MIT",
+      "engines": {
+        "node": ">=14.0.0"
+      }
+    },
+    "node_modules/@rolldown/pluginutils": {
+      "version": "1.0.0-beta.27",
+      "resolved": "https://registry.npmjs.org/@rolldown/pluginutils/-/pluginutils-1.0.0-beta.27.tgz",
+      "integrity": "sha512-+d0F4MKMCbeVUJwG96uQ4SgAznZNSq93I3V+9NHA4OpvqG8mRCpGdKmK8l/dl02h2CCDHwW2FqilnTyDcAnqjA==",
+      "dev": true,
+      "license": "MIT"
+    },
+    "node_modules/@rollup/rollup-android-arm-eabi": {
+      "version": "4.59.0",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-android-arm-eabi/-/rollup-android-arm-eabi-4.59.0.tgz",
+      "integrity": "sha512-upnNBkA6ZH2VKGcBj9Fyl9IGNPULcjXRlg0LLeaioQWueH30p6IXtJEbKAgvyv+mJaMxSm1l6xwDXYjpEMiLMg==",
+      "cpu": [
+        "arm"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "android"
+      ]
+    },
+    "node_modules/@rollup/rollup-android-arm64": {
+      "version": "4.59.0",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-android-arm64/-/rollup-android-arm64-4.59.0.tgz",
+      "integrity": "sha512-hZ+Zxj3SySm4A/DylsDKZAeVg0mvi++0PYVceVyX7hemkw7OreKdCvW2oQ3T1FMZvCaQXqOTHb8qmBShoqk69Q==",
+      "cpu": [
+        "arm64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "android"
+      ]
+    },
+    "node_modules/@rollup/rollup-darwin-arm64": {
+      "version": "4.59.0",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-darwin-arm64/-/rollup-darwin-arm64-4.59.0.tgz",
+      "integrity": "sha512-W2Psnbh1J8ZJw0xKAd8zdNgF9HRLkdWwwdWqubSVk0pUuQkoHnv7rx4GiF9rT4t5DIZGAsConRE3AxCdJ4m8rg==",
+      "cpu": [
+        "arm64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "darwin"
+      ]
+    },
+    "node_modules/@rollup/rollup-darwin-x64": {
+      "version": "4.59.0",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-darwin-x64/-/rollup-darwin-x64-4.59.0.tgz",
+      "integrity": "sha512-ZW2KkwlS4lwTv7ZVsYDiARfFCnSGhzYPdiOU4IM2fDbL+QGlyAbjgSFuqNRbSthybLbIJ915UtZBtmuLrQAT/w==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "darwin"
+      ]
+    },
+    "node_modules/@rollup/rollup-freebsd-arm64": {
+      "version": "4.59.0",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-freebsd-arm64/-/rollup-freebsd-arm64-4.59.0.tgz",
+      "integrity": "sha512-EsKaJ5ytAu9jI3lonzn3BgG8iRBjV4LxZexygcQbpiU0wU0ATxhNVEpXKfUa0pS05gTcSDMKpn3Sx+QB9RlTTA==",
+      "cpu": [
+        "arm64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "freebsd"
+      ]
+    },
+    "node_modules/@rollup/rollup-freebsd-x64": {
+      "version": "4.59.0",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-freebsd-x64/-/rollup-freebsd-x64-4.59.0.tgz",
+      "integrity": "sha512-d3DuZi2KzTMjImrxoHIAODUZYoUUMsuUiY4SRRcJy6NJoZ6iIqWnJu9IScV9jXysyGMVuW+KNzZvBLOcpdl3Vg==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "freebsd"
+      ]
+    },
+    "node_modules/@rollup/rollup-linux-arm-gnueabihf": {
+      "version": "4.59.0",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-arm-gnueabihf/-/rollup-linux-arm-gnueabihf-4.59.0.tgz",
+      "integrity": "sha512-t4ONHboXi/3E0rT6OZl1pKbl2Vgxf9vJfWgmUoCEVQVxhW6Cw/c8I6hbbu7DAvgp82RKiH7TpLwxnJeKv2pbsw==",
+      "cpu": [
+        "arm"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ]
+    },
+    "node_modules/@rollup/rollup-linux-arm-musleabihf": {
+      "version": "4.59.0",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-arm-musleabihf/-/rollup-linux-arm-musleabihf-4.59.0.tgz",
+      "integrity": "sha512-CikFT7aYPA2ufMD086cVORBYGHffBo4K8MQ4uPS/ZnY54GKj36i196u8U+aDVT2LX4eSMbyHtyOh7D7Zvk2VvA==",
+      "cpu": [
+        "arm"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ]
+    },
+    "node_modules/@rollup/rollup-linux-arm64-gnu": {
+      "version": "4.59.0",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-arm64-gnu/-/rollup-linux-arm64-gnu-4.59.0.tgz",
+      "integrity": "sha512-jYgUGk5aLd1nUb1CtQ8E+t5JhLc9x5WdBKew9ZgAXg7DBk0ZHErLHdXM24rfX+bKrFe+Xp5YuJo54I5HFjGDAA==",
+      "cpu": [
+        "arm64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ]
+    },
+    "node_modules/@rollup/rollup-linux-arm64-musl": {
+      "version": "4.59.0",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-arm64-musl/-/rollup-linux-arm64-musl-4.59.0.tgz",
+      "integrity": "sha512-peZRVEdnFWZ5Bh2KeumKG9ty7aCXzzEsHShOZEFiCQlDEepP1dpUl/SrUNXNg13UmZl+gzVDPsiCwnV1uI0RUA==",
+      "cpu": [
+        "arm64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ]
+    },
+    "node_modules/@rollup/rollup-linux-loong64-gnu": {
+      "version": "4.59.0",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-loong64-gnu/-/rollup-linux-loong64-gnu-4.59.0.tgz",
+      "integrity": "sha512-gbUSW/97f7+r4gHy3Jlup8zDG190AuodsWnNiXErp9mT90iCy9NKKU0Xwx5k8VlRAIV2uU9CsMnEFg/xXaOfXg==",
+      "cpu": [
+        "loong64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ]
+    },
+    "node_modules/@rollup/rollup-linux-loong64-musl": {
+      "version": "4.59.0",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-loong64-musl/-/rollup-linux-loong64-musl-4.59.0.tgz",
+      "integrity": "sha512-yTRONe79E+o0FWFijasoTjtzG9EBedFXJMl888NBEDCDV9I2wGbFFfJQQe63OijbFCUZqxpHz1GzpbtSFikJ4Q==",
+      "cpu": [
+        "loong64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ]
+    },
+    "node_modules/@rollup/rollup-linux-ppc64-gnu": {
+      "version": "4.59.0",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-ppc64-gnu/-/rollup-linux-ppc64-gnu-4.59.0.tgz",
+      "integrity": "sha512-sw1o3tfyk12k3OEpRddF68a1unZ5VCN7zoTNtSn2KndUE+ea3m3ROOKRCZxEpmT9nsGnogpFP9x6mnLTCaoLkA==",
+      "cpu": [
+        "ppc64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ]
+    },
+    "node_modules/@rollup/rollup-linux-ppc64-musl": {
+      "version": "4.59.0",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-ppc64-musl/-/rollup-linux-ppc64-musl-4.59.0.tgz",
+      "integrity": "sha512-+2kLtQ4xT3AiIxkzFVFXfsmlZiG5FXYW7ZyIIvGA7Bdeuh9Z0aN4hVyXS/G1E9bTP/vqszNIN/pUKCk/BTHsKA==",
+      "cpu": [
+        "ppc64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ]
+    },
+    "node_modules/@rollup/rollup-linux-riscv64-gnu": {
+      "version": "4.59.0",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-riscv64-gnu/-/rollup-linux-riscv64-gnu-4.59.0.tgz",
+      "integrity": "sha512-NDYMpsXYJJaj+I7UdwIuHHNxXZ/b/N2hR15NyH3m2qAtb/hHPA4g4SuuvrdxetTdndfj9b1WOmy73kcPRoERUg==",
+      "cpu": [
+        "riscv64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ]
+    },
+    "node_modules/@rollup/rollup-linux-riscv64-musl": {
+      "version": "4.59.0",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-riscv64-musl/-/rollup-linux-riscv64-musl-4.59.0.tgz",
+      "integrity": "sha512-nLckB8WOqHIf1bhymk+oHxvM9D3tyPndZH8i8+35p/1YiVoVswPid2yLzgX7ZJP0KQvnkhM4H6QZ5m0LzbyIAg==",
+      "cpu": [
+        "riscv64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ]
+    },
+    "node_modules/@rollup/rollup-linux-s390x-gnu": {
+      "version": "4.59.0",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-s390x-gnu/-/rollup-linux-s390x-gnu-4.59.0.tgz",
+      "integrity": "sha512-oF87Ie3uAIvORFBpwnCvUzdeYUqi2wY6jRFWJAy1qus/udHFYIkplYRW+wo+GRUP4sKzYdmE1Y3+rY5Gc4ZO+w==",
+      "cpu": [
+        "s390x"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ]
+    },
+    "node_modules/@rollup/rollup-linux-x64-gnu": {
+      "version": "4.59.0",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-x64-gnu/-/rollup-linux-x64-gnu-4.59.0.tgz",
+      "integrity": "sha512-3AHmtQq/ppNuUspKAlvA8HtLybkDflkMuLK4DPo77DfthRb71V84/c4MlWJXixZz4uruIH4uaa07IqoAkG64fg==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ]
+    },
+    "node_modules/@rollup/rollup-linux-x64-musl": {
+      "version": "4.59.0",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-x64-musl/-/rollup-linux-x64-musl-4.59.0.tgz",
+      "integrity": "sha512-2UdiwS/9cTAx7qIUZB/fWtToJwvt0Vbo0zmnYt7ED35KPg13Q0ym1g442THLC7VyI6JfYTP4PiSOWyoMdV2/xg==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ]
+    },
+    "node_modules/@rollup/rollup-openbsd-x64": {
+      "version": "4.59.0",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-openbsd-x64/-/rollup-openbsd-x64-4.59.0.tgz",
+      "integrity": "sha512-M3bLRAVk6GOwFlPTIxVBSYKUaqfLrn8l0psKinkCFxl4lQvOSz8ZrKDz2gxcBwHFpci0B6rttydI4IpS4IS/jQ==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "openbsd"
+      ]
+    },
+    "node_modules/@rollup/rollup-openharmony-arm64": {
+      "version": "4.59.0",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-openharmony-arm64/-/rollup-openharmony-arm64-4.59.0.tgz",
+      "integrity": "sha512-tt9KBJqaqp5i5HUZzoafHZX8b5Q2Fe7UjYERADll83O4fGqJ49O1FsL6LpdzVFQcpwvnyd0i+K/VSwu/o/nWlA==",
+      "cpu": [
+        "arm64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "openharmony"
+      ]
+    },
+    "node_modules/@rollup/rollup-win32-arm64-msvc": {
+      "version": "4.59.0",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-win32-arm64-msvc/-/rollup-win32-arm64-msvc-4.59.0.tgz",
+      "integrity": "sha512-V5B6mG7OrGTwnxaNUzZTDTjDS7F75PO1ae6MJYdiMu60sq0CqN5CVeVsbhPxalupvTX8gXVSU9gq+Rx1/hvu6A==",
+      "cpu": [
+        "arm64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "win32"
+      ]
+    },
+    "node_modules/@rollup/rollup-win32-ia32-msvc": {
+      "version": "4.59.0",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-win32-ia32-msvc/-/rollup-win32-ia32-msvc-4.59.0.tgz",
+      "integrity": "sha512-UKFMHPuM9R0iBegwzKF4y0C4J9u8C6MEJgFuXTBerMk7EJ92GFVFYBfOZaSGLu6COf7FxpQNqhNS4c4icUPqxA==",
+      "cpu": [
+        "ia32"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "win32"
+      ]
+    },
+    "node_modules/@rollup/rollup-win32-x64-gnu": {
+      "version": "4.59.0",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-win32-x64-gnu/-/rollup-win32-x64-gnu-4.59.0.tgz",
+      "integrity": "sha512-laBkYlSS1n2L8fSo1thDNGrCTQMmxjYY5G0WFWjFFYZkKPjsMBsgJfGf4TLxXrF6RyhI60L8TMOjBMvXiTcxeA==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "win32"
+      ]
+    },
+    "node_modules/@rollup/rollup-win32-x64-msvc": {
+      "version": "4.59.0",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-win32-x64-msvc/-/rollup-win32-x64-msvc-4.59.0.tgz",
+      "integrity": "sha512-2HRCml6OztYXyJXAvdDXPKcawukWY2GpR5/nxKp4iBgiO3wcoEGkAaqctIbZcNB6KlUQBIqt8VYkNSj2397EfA==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "win32"
+      ]
+    },
+    "node_modules/@types/babel__core": {
+      "version": "7.20.5",
+      "resolved": "https://registry.npmjs.org/@types/babel__core/-/babel__core-7.20.5.tgz",
+      "integrity": "sha512-qoQprZvz5wQFJwMDqeseRXWv3rqMvhgpbXFfVyWhbx9X47POIA6i/+dXefEmZKoAgOaTdaIgNSMqMIU61yRyzA==",
+      "dev": true,
+      "license": "MIT",
+      "dependencies": {
+        "@babel/parser": "^7.20.7",
+        "@babel/types": "^7.20.7",
+        "@types/babel__generator": "*",
+        "@types/babel__template": "*",
+        "@types/babel__traverse": "*"
+      }
+    },
+    "node_modules/@types/babel__generator": {
+      "version": "7.27.0",
+      "resolved": "https://registry.npmjs.org/@types/babel__generator/-/babel__generator-7.27.0.tgz",
+      "integrity": "sha512-ufFd2Xi92OAVPYsy+P4n7/U7e68fex0+Ee8gSG9KX7eo084CWiQ4sdxktvdl0bOPupXtVJPY19zk6EwWqUQ8lg==",
+      "dev": true,
+      "license": "MIT",
+      "dependencies": {
+        "@babel/types": "^7.0.0"
+      }
+    },
+    "node_modules/@types/babel__template": {
+      "version": "7.4.4",
+      "resolved": "https://registry.npmjs.org/@types/babel__template/-/babel__template-7.4.4.tgz",
+      "integrity": "sha512-h/NUaSyG5EyxBIp8YRxo4RMe2/qQgvyowRwVMzhYhBCONbW8PUsg4lkFMrhgZhUe5z3L3MiLDuvyJ/CaPa2A8A==",
+      "dev": true,
+      "license": "MIT",
+      "dependencies": {
+        "@babel/parser": "^7.1.0",
+        "@babel/types": "^7.0.0"
+      }
+    },
+    "node_modules/@types/babel__traverse": {
+      "version": "7.28.0",
+      "resolved": "https://registry.npmjs.org/@types/babel__traverse/-/babel__traverse-7.28.0.tgz",
+      "integrity": "sha512-8PvcXf70gTDZBgt9ptxJ8elBeBjcLOAcOtoO/mPJjtji1+CdGbHgm77om1GrsPxsiE+uXIpNSK64UYaIwQXd4Q==",
+      "dev": true,
+      "license": "MIT",
+      "dependencies": {
+        "@babel/types": "^7.28.2"
+      }
+    },
+    "node_modules/@types/d3-array": {
+      "version": "3.2.2",
+      "resolved": "https://registry.npmjs.org/@types/d3-array/-/d3-array-3.2.2.tgz",
+      "integrity": "sha512-hOLWVbm7uRza0BYXpIIW5pxfrKe0W+D5lrFiAEYR+pb6w3N2SwSMaJbXdUfSEv+dT4MfHBLtn5js0LAWaO6otw==",
+      "license": "MIT"
+    },
+    "node_modules/@types/d3-color": {
+      "version": "3.1.3",
+      "resolved": "https://registry.npmjs.org/@types/d3-color/-/d3-color-3.1.3.tgz",
+      "integrity": "sha512-iO90scth9WAbmgv7ogoq57O9YpKmFBbmoEoCHDB2xMBY0+/KVrqAaCDyCE16dUspeOvIxFFRI+0sEtqDqy2b4A==",
+      "license": "MIT"
+    },
+    "node_modules/@types/d3-ease": {
+      "version": "3.0.2",
+      "resolved": "https://registry.npmjs.org/@types/d3-ease/-/d3-ease-3.0.2.tgz",
+      "integrity": "sha512-NcV1JjO5oDzoK26oMzbILE6HW7uVXOHLQvHshBUW4UMdZGfiY6v5BeQwh9a9tCzv+CeefZQHJt5SRgK154RtiA==",
+      "license": "MIT"
+    },
+    "node_modules/@types/d3-interpolate": {
+      "version": "3.0.4",
+      "resolved": "https://registry.npmjs.org/@types/d3-interpolate/-/d3-interpolate-3.0.4.tgz",
+      "integrity": "sha512-mgLPETlrpVV1YRJIglr4Ez47g7Yxjl1lj7YKsiMCb27VJH9W8NVM6Bb9d8kkpG/uAQS5AmbA48q2IAolKKo1MA==",
+      "license": "MIT",
+      "dependencies": {
+        "@types/d3-color": "*"
+      }
+    },
+    "node_modules/@types/d3-path": {
+      "version": "3.1.1",
+      "resolved": "https://registry.npmjs.org/@types/d3-path/-/d3-path-3.1.1.tgz",
+      "integrity": "sha512-VMZBYyQvbGmWyWVea0EHs/BwLgxc+MKi1zLDCONksozI4YJMcTt8ZEuIR4Sb1MMTE8MMW49v0IwI5+b7RmfWlg==",
+      "license": "MIT"
+    },
+    "node_modules/@types/d3-scale": {
+      "version": "4.0.9",
+      "resolved": "https://registry.npmjs.org/@types/d3-scale/-/d3-scale-4.0.9.tgz",
+      "integrity": "sha512-dLmtwB8zkAeO/juAMfnV+sItKjlsw2lKdZVVy6LRr0cBmegxSABiLEpGVmSJJ8O08i4+sGR6qQtb6WtuwJdvVw==",
+      "license": "MIT",
+      "dependencies": {
+        "@types/d3-time": "*"
+      }
+    },
+    "node_modules/@types/d3-shape": {
+      "version": "3.1.8",
+      "resolved": "https://registry.npmjs.org/@types/d3-shape/-/d3-shape-3.1.8.tgz",
+      "integrity": "sha512-lae0iWfcDeR7qt7rA88BNiqdvPS5pFVPpo5OfjElwNaT2yyekbM0C9vK+yqBqEmHr6lDkRnYNoTBYlAgJa7a4w==",
+      "license": "MIT",
+      "dependencies": {
+        "@types/d3-path": "*"
+      }
+    },
+    "node_modules/@types/d3-time": {
+      "version": "3.0.4",
+      "resolved": "https://registry.npmjs.org/@types/d3-time/-/d3-time-3.0.4.tgz",
+      "integrity": "sha512-yuzZug1nkAAaBlBBikKZTgzCeA+k1uy4ZFwWANOfKw5z5LRhV0gNA7gNkKm7HoK+HRN0wX3EkxGk0fpbWhmB7g==",
+      "license": "MIT"
+    },
+    "node_modules/@types/d3-timer": {
+      "version": "3.0.2",
+      "resolved": "https://registry.npmjs.org/@types/d3-timer/-/d3-timer-3.0.2.tgz",
+      "integrity": "sha512-Ps3T8E8dZDam6fUyNiMkekK3XUsaUEik+idO9/YjPtfj2qruF8tFBXS7XhtE4iIXBLxhmLjP3SXpLhVf21I9Lw==",
+      "license": "MIT"
+    },
+    "node_modules/@types/estree": {
+      "version": "1.0.8",
+      "resolved": "https://registry.npmjs.org/@types/estree/-/estree-1.0.8.tgz",
+      "integrity": "sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w==",
+      "dev": true,
+      "license": "MIT"
+    },
+    "node_modules/@types/raf": {
+      "version": "3.4.3",
+      "resolved": "https://registry.npmjs.org/@types/raf/-/raf-3.4.3.tgz",
+      "integrity": "sha512-c4YAvMedbPZ5tEyxzQdMoOhhJ4RD3rngZIdwC2/qDN3d7JpEhB6fiBRKVY1lg5B7Wk+uPBjn5f39j1/2MY1oOw==",
+      "license": "MIT",
+      "optional": true
+    },
+    "node_modules/@vitejs/plugin-react": {
+      "version": "4.7.0",
+      "resolved": "https://registry.npmjs.org/@vitejs/plugin-react/-/plugin-react-4.7.0.tgz",
+      "integrity": "sha512-gUu9hwfWvvEDBBmgtAowQCojwZmJ5mcLn3aufeCsitijs3+f2NsrPtlAWIR6OPiqljl96GVCUbLe0HyqIpVaoA==",
+      "dev": true,
+      "license": "MIT",
+      "dependencies": {
+        "@babel/core": "^7.28.0",
+        "@babel/plugin-transform-react-jsx-self": "^7.27.1",
+        "@babel/plugin-transform-react-jsx-source": "^7.27.1",
+        "@rolldown/pluginutils": "1.0.0-beta.27",
+        "@types/babel__core": "^7.20.5",
+        "react-refresh": "^0.17.0"
+      },
+      "engines": {
+        "node": "^14.18.0 || >=16.0.0"
+      },
+      "peerDependencies": {
+        "vite": "^4.2.0 || ^5.0.0 || ^6.0.0 || ^7.0.0"
+      }
+    },
+    "node_modules/adler-32": {
+      "version": "1.3.1",
+      "resolved": "https://registry.npmjs.org/adler-32/-/adler-32-1.3.1.tgz",
+      "integrity": "sha512-ynZ4w/nUUv5rrsR8UUGoe1VC9hZj6V5hU9Qw1HlMDJGEJw5S7TfTErWTjMys6M7vr0YWcPqs3qAr4ss0nDfP+A==",
+      "license": "Apache-2.0",
+      "engines": {
+        "node": ">=0.8"
+      }
+    },
+    "node_modules/asynckit": {
+      "version": "0.4.0",
+      "resolved": "https://registry.npmjs.org/asynckit/-/asynckit-0.4.0.tgz",
+      "integrity": "sha512-Oei9OH4tRh0YqU3GxhX79dM/mwVgvbZJaSNaRk+bshkj0S5cfHcgYakreBjrHwatXKbz+IoIdYLxrKim2MjW0Q==",
+      "license": "MIT"
+    },
+    "node_modules/atob": {
+      "version": "2.1.2",
+      "resolved": "https://registry.npmjs.org/atob/-/atob-2.1.2.tgz",
+      "integrity": "sha512-Wm6ukoaOGJi/73p/cl2GvLjTI5JM1k/O14isD73YML8StrH/7/lRFgmg8nICZgD3bZZvjwCGxtMOD3wWNAu8cg==",
+      "license": "(MIT OR Apache-2.0)",
+      "bin": {
+        "atob": "bin/atob.js"
+      },
+      "engines": {
+        "node": ">= 4.5.0"
+      }
+    },
+    "node_modules/axios": {
+      "version": "1.13.6",
+      "resolved": "https://registry.npmjs.org/axios/-/axios-1.13.6.tgz",
+      "integrity": "sha512-ChTCHMouEe2kn713WHbQGcuYrr6fXTBiu460OTwWrWob16g1bXn4vtz07Ope7ewMozJAnEquLk5lWQWtBig9DQ==",
+      "license": "MIT",
+      "dependencies": {
+        "follow-redirects": "^1.15.11",
+        "form-data": "^4.0.5",
+        "proxy-from-env": "^1.1.0"
+      }
+    },
+    "node_modules/base64-arraybuffer": {
+      "version": "1.0.2",
+      "resolved": "https://registry.npmjs.org/base64-arraybuffer/-/base64-arraybuffer-1.0.2.tgz",
+      "integrity": "sha512-I3yl4r9QB5ZRY3XuJVEPfc2XhZO6YweFPI+UovAzn+8/hb3oJ6lnysaFcjVpkCPfVWFUDvoZ8kmVDP7WyRtYtQ==",
+      "license": "MIT",
+      "optional": true,
+      "engines": {
+        "node": ">= 0.6.0"
+      }
+    },
+    "node_modules/baseline-browser-mapping": {
+      "version": "2.10.0",
+      "resolved": "https://registry.npmjs.org/baseline-browser-mapping/-/baseline-browser-mapping-2.10.0.tgz",
+      "integrity": "sha512-lIyg0szRfYbiy67j9KN8IyeD7q7hcmqnJ1ddWmNt19ItGpNN64mnllmxUNFIOdOm6by97jlL6wfpTTJrmnjWAA==",
+      "dev": true,
+      "license": "Apache-2.0",
+      "bin": {
+        "baseline-browser-mapping": "dist/cli.cjs"
+      },
+      "engines": {
+        "node": ">=6.0.0"
+      }
+    },
+    "node_modules/browserslist": {
+      "version": "4.28.1",
+      "resolved": "https://registry.npmjs.org/browserslist/-/browserslist-4.28.1.tgz",
+      "integrity": "sha512-ZC5Bd0LgJXgwGqUknZY/vkUQ04r8NXnJZ3yYi4vDmSiZmC/pdSN0NbNRPxZpbtO4uAfDUAFffO8IZoM3Gj8IkA==",
+      "dev": true,
+      "funding": [
+        {
+          "type": "opencollective",
+          "url": "https://opencollective.com/browserslist"
+        },
+        {
+          "type": "tidelift",
+          "url": "https://tidelift.com/funding/github/npm/browserslist"
+        },
+        {
+          "type": "github",
+          "url": "https://github.com/sponsors/ai"
+        }
+      ],
+      "license": "MIT",
+      "dependencies": {
+        "baseline-browser-mapping": "^2.9.0",
+        "caniuse-lite": "^1.0.30001759",
+        "electron-to-chromium": "^1.5.263",
+        "node-releases": "^2.0.27",
+        "update-browserslist-db": "^1.2.0"
+      },
+      "bin": {
+        "browserslist": "cli.js"
+      },
+      "engines": {
+        "node": "^6 || ^7 || ^8 || ^9 || ^10 || ^11 || ^12 || >=13.7"
+      }
+    },
+    "node_modules/btoa": {
+      "version": "1.2.1",
+      "resolved": "https://registry.npmjs.org/btoa/-/btoa-1.2.1.tgz",
+      "integrity": "sha512-SB4/MIGlsiVkMcHmT+pSmIPoNDoHg+7cMzmt3Uxt628MTz2487DKSqK/fuhFBrkuqrYv5UCEnACpF4dTFNKc/g==",
+      "license": "(MIT OR Apache-2.0)",
+      "bin": {
+        "btoa": "bin/btoa.js"
+      },
+      "engines": {
+        "node": ">= 0.4.0"
+      }
+    },
+    "node_modules/call-bind-apply-helpers": {
+      "version": "1.0.2",
+      "resolved": "https://registry.npmjs.org/call-bind-apply-helpers/-/call-bind-apply-helpers-1.0.2.tgz",
+      "integrity": "sha512-Sp1ablJ0ivDkSzjcaJdxEunN5/XvksFJ2sMBFfq6x0ryhQV/2b/KwFe21cMpmHtPOSij8K99/wSfoEuTObmuMQ==",
+      "license": "MIT",
+      "dependencies": {
+        "es-errors": "^1.3.0",
+        "function-bind": "^1.1.2"
+      },
+      "engines": {
+        "node": ">= 0.4"
+      }
+    },
+    "node_modules/caniuse-lite": {
+      "version": "1.0.30001777",
+      "resolved": "https://registry.npmjs.org/caniuse-lite/-/caniuse-lite-1.0.30001777.tgz",
+      "integrity": "sha512-tmN+fJxroPndC74efCdp12j+0rk0RHwV5Jwa1zWaFVyw2ZxAuPeG8ZgWC3Wz7uSjT3qMRQ5XHZ4COgQmsCMJAQ==",
+      "dev": true,
+      "funding": [
+        {
+          "type": "opencollective",
+          "url": "https://opencollective.com/browserslist"
+        },
+        {
+          "type": "tidelift",
+          "url": "https://tidelift.com/funding/github/npm/caniuse-lite"
+        },
+        {
+          "type": "github",
+          "url": "https://github.com/sponsors/ai"
+        }
+      ],
+      "license": "CC-BY-4.0"
+    },
+    "node_modules/canvg": {
+      "version": "3.0.11",
+      "resolved": "https://registry.npmjs.org/canvg/-/canvg-3.0.11.tgz",
+      "integrity": "sha512-5ON+q7jCTgMp9cjpu4Jo6XbvfYwSB2Ow3kzHKfIyJfaCAOHLbdKPQqGKgfED/R5B+3TFFfe8pegYA+b423SRyA==",
+      "license": "MIT",
+      "optional": true,
+      "dependencies": {
+        "@babel/runtime": "^7.12.5",
+        "@types/raf": "^3.4.0",
+        "core-js": "^3.8.3",
+        "raf": "^3.4.1",
+        "regenerator-runtime": "^0.13.7",
+        "rgbcolor": "^1.0.1",
+        "stackblur-canvas": "^2.0.0",
+        "svg-pathdata": "^6.0.3"
+      },
+      "engines": {
+        "node": ">=10.0.0"
+      }
+    },
+    "node_modules/cfb": {
+      "version": "1.2.2",
+      "resolved": "https://registry.npmjs.org/cfb/-/cfb-1.2.2.tgz",
+      "integrity": "sha512-KfdUZsSOw19/ObEWasvBP/Ac4reZvAGauZhs6S/gqNhXhI7cKwvlH7ulj+dOEYnca4bm4SGo8C1bTAQvnTjgQA==",
+      "license": "Apache-2.0",
+      "dependencies": {
+        "adler-32": "~1.3.0",
+        "crc-32": "~1.2.0"
+      },
+      "engines": {
+        "node": ">=0.8"
+      }
+    },
+    "node_modules/clsx": {
+      "version": "2.1.1",
+      "resolved": "https://registry.npmjs.org/clsx/-/clsx-2.1.1.tgz",
+      "integrity": "sha512-eYm0QWBtUrBWZWG0d386OGAw16Z995PiOVo2B7bjWSbHedGl5e0ZWaq65kOGgUSNesEIDkB9ISbTg/JK9dhCZA==",
+      "license": "MIT",
+      "engines": {
+        "node": ">=6"
+      }
+    },
+    "node_modules/codepage": {
+      "version": "1.15.0",
+      "resolved": "https://registry.npmjs.org/codepage/-/codepage-1.15.0.tgz",
+      "integrity": "sha512-3g6NUTPd/YtuuGrhMnOMRjFc+LJw/bnMp3+0r/Wcz3IXUuCosKRJvMphm5+Q+bvTVGcJJuRvVLuYba+WojaFaA==",
+      "license": "Apache-2.0",
+      "engines": {
+        "node": ">=0.8"
+      }
+    },
+    "node_modules/combined-stream": {
+      "version": "1.0.8",
+      "resolved": "https://registry.npmjs.org/combined-stream/-/combined-stream-1.0.8.tgz",
+      "integrity": "sha512-FQN4MRfuJeHf7cBbBMJFXhKSDq+2kAArBlmRBvcvFE5BB1HZKXtSFASDhdlz9zOYwxh8lDdnvmMOe/+5cdoEdg==",
+      "license": "MIT",
+      "dependencies": {
+        "delayed-stream": "~1.0.0"
+      },
+      "engines": {
+        "node": ">= 0.8"
+      }
+    },
+    "node_modules/convert-source-map": {
+      "version": "2.0.0",
+      "resolved": "https://registry.npmjs.org/convert-source-map/-/convert-source-map-2.0.0.tgz",
+      "integrity": "sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg==",
+      "dev": true,
+      "license": "MIT"
+    },
+    "node_modules/core-js": {
+      "version": "3.48.0",
+      "resolved": "https://registry.npmjs.org/core-js/-/core-js-3.48.0.tgz",
+      "integrity": "sha512-zpEHTy1fjTMZCKLHUZoVeylt9XrzaIN2rbPXEt0k+q7JE5CkCZdo6bNq55bn24a69CH7ErAVLKijxJja4fw+UQ==",
+      "hasInstallScript": true,
+      "license": "MIT",
+      "optional": true,
+      "funding": {
+        "type": "opencollective",
+        "url": "https://opencollective.com/core-js"
+      }
+    },
+    "node_modules/crc-32": {
+      "version": "1.2.2",
+      "resolved": "https://registry.npmjs.org/crc-32/-/crc-32-1.2.2.tgz",
+      "integrity": "sha512-ROmzCKrTnOwybPcJApAA6WBWij23HVfGVNKqqrZpuyZOHqK2CwHSvpGuyt/UNNvaIjEd8X5IFGp4Mh+Ie1IHJQ==",
+      "license": "Apache-2.0",
+      "bin": {
+        "crc32": "bin/crc32.njs"
+      },
+      "engines": {
+        "node": ">=0.8"
+      }
+    },
+    "node_modules/css-line-break": {
+      "version": "2.1.0",
+      "resolved": "https://registry.npmjs.org/css-line-break/-/css-line-break-2.1.0.tgz",
+      "integrity": "sha512-FHcKFCZcAha3LwfVBhCQbW2nCNbkZXn7KVUJcsT5/P8YmfsVja0FMPJr0B903j/E69HUphKiV9iQArX8SDYA4w==",
+      "license": "MIT",
+      "optional": true,
+      "dependencies": {
+        "utrie": "^1.0.2"
+      }
+    },
+    "node_modules/csstype": {
+      "version": "3.2.3",
+      "resolved": "https://registry.npmjs.org/csstype/-/csstype-3.2.3.tgz",
+      "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
+      "license": "MIT"
+    },
+    "node_modules/d3-array": {
+      "version": "3.2.4",
+      "resolved": "https://registry.npmjs.org/d3-array/-/d3-array-3.2.4.tgz",
+      "integrity": "sha512-tdQAmyA18i4J7wprpYq8ClcxZy3SC31QMeByyCFyRt7BVHdREQZ5lpzoe5mFEYZUWe+oq8HBvk9JjpibyEV4Jg==",
+      "license": "ISC",
+      "dependencies": {
+        "internmap": "1 - 2"
+      },
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/d3-color": {
+      "version": "3.1.0",
+      "resolved": "https://registry.npmjs.org/d3-color/-/d3-color-3.1.0.tgz",
+      "integrity": "sha512-zg/chbXyeBtMQ1LbD/WSoW2DpC3I0mpmPdW+ynRTj/x2DAWYrIY7qeZIHidozwV24m4iavr15lNwIwLxRmOxhA==",
+      "license": "ISC",
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/d3-ease": {
+      "version": "3.0.1",
+      "resolved": "https://registry.npmjs.org/d3-ease/-/d3-ease-3.0.1.tgz",
+      "integrity": "sha512-wR/XK3D3XcLIZwpbvQwQ5fK+8Ykds1ip7A2Txe0yxncXSdq1L9skcG7blcedkOX+ZcgxGAmLX1FrRGbADwzi0w==",
+      "license": "BSD-3-Clause",
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/d3-format": {
+      "version": "3.1.2",
+      "resolved": "https://registry.npmjs.org/d3-format/-/d3-format-3.1.2.tgz",
+      "integrity": "sha512-AJDdYOdnyRDV5b6ArilzCPPwc1ejkHcoyFarqlPqT7zRYjhavcT3uSrqcMvsgh2CgoPbK3RCwyHaVyxYcP2Arg==",
+      "license": "ISC",
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/d3-interpolate": {
+      "version": "3.0.1",
+      "resolved": "https://registry.npmjs.org/d3-interpolate/-/d3-interpolate-3.0.1.tgz",
+      "integrity": "sha512-3bYs1rOD33uo8aqJfKP3JWPAibgw8Zm2+L9vBKEHJ2Rg+viTR7o5Mmv5mZcieN+FRYaAOWX5SJATX6k1PWz72g==",
+      "license": "ISC",
+      "dependencies": {
+        "d3-color": "1 - 3"
+      },
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/d3-path": {
+      "version": "3.1.0",
+      "resolved": "https://registry.npmjs.org/d3-path/-/d3-path-3.1.0.tgz",
+      "integrity": "sha512-p3KP5HCf/bvjBSSKuXid6Zqijx7wIfNW+J/maPs+iwR35at5JCbLUT0LzF1cnjbCHWhqzQTIN2Jpe8pRebIEFQ==",
+      "license": "ISC",
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/d3-scale": {
+      "version": "4.0.2",
+      "resolved": "https://registry.npmjs.org/d3-scale/-/d3-scale-4.0.2.tgz",
+      "integrity": "sha512-GZW464g1SH7ag3Y7hXjf8RoUuAFIqklOAq3MRl4OaWabTFJY9PN/E1YklhXLh+OQ3fM9yS2nOkCoS+WLZ6kvxQ==",
+      "license": "ISC",
+      "dependencies": {
+        "d3-array": "2.10.0 - 3",
+        "d3-format": "1 - 3",
+        "d3-interpolate": "1.2.0 - 3",
+        "d3-time": "2.1.1 - 3",
+        "d3-time-format": "2 - 4"
+      },
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/d3-shape": {
+      "version": "3.2.0",
+      "resolved": "https://registry.npmjs.org/d3-shape/-/d3-shape-3.2.0.tgz",
+      "integrity": "sha512-SaLBuwGm3MOViRq2ABk3eLoxwZELpH6zhl3FbAoJ7Vm1gofKx6El1Ib5z23NUEhF9AsGl7y+dzLe5Cw2AArGTA==",
+      "license": "ISC",
+      "dependencies": {
+        "d3-path": "^3.1.0"
+      },
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/d3-time": {
+      "version": "3.1.0",
+      "resolved": "https://registry.npmjs.org/d3-time/-/d3-time-3.1.0.tgz",
+      "integrity": "sha512-VqKjzBLejbSMT4IgbmVgDjpkYrNWUYJnbCGo874u7MMKIWsILRX+OpX/gTk8MqjpT1A/c6HY2dCA77ZN0lkQ2Q==",
+      "license": "ISC",
+      "dependencies": {
+        "d3-array": "2 - 3"
+      },
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/d3-time-format": {
+      "version": "4.1.0",
+      "resolved": "https://registry.npmjs.org/d3-time-format/-/d3-time-format-4.1.0.tgz",
+      "integrity": "sha512-dJxPBlzC7NugB2PDLwo9Q8JiTR3M3e4/XANkreKSUxF8vvXKqm1Yfq4Q5dl8budlunRVlUUaDUgFt7eA8D6NLg==",
+      "license": "ISC",
+      "dependencies": {
+        "d3-time": "1 - 3"
+      },
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/d3-timer": {
+      "version": "3.0.1",
+      "resolved": "https://registry.npmjs.org/d3-timer/-/d3-timer-3.0.1.tgz",
+      "integrity": "sha512-ndfJ/JxxMd3nw31uyKoY2naivF+r29V+Lc0svZxe1JvvIRmi8hUsrMvdOwgS1o6uBHmiz91geQ0ylPP0aj1VUA==",
+      "license": "ISC",
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/debug": {
+      "version": "4.4.3",
+      "resolved": "https://registry.npmjs.org/debug/-/debug-4.4.3.tgz",
+      "integrity": "sha512-RGwwWnwQvkVfavKVt22FGLw+xYSdzARwm0ru6DhTVA3umU5hZc28V3kO4stgYryrTlLpuvgI9GiijltAjNbcqA==",
+      "dev": true,
+      "license": "MIT",
+      "dependencies": {
+        "ms": "^2.1.3"
+      },
+      "engines": {
+        "node": ">=6.0"
+      },
+      "peerDependenciesMeta": {
+        "supports-color": {
+          "optional": true
         }
       }
-    })
-    
-    doc.save(`deer_alatnica_${new Date().toISOString().slice(0,10)}.pdf`)
-    return true
-  } catch(e) {
-    // Fallback: CSV download
-    const csv = [
-      ['Naziv','ID','Kategorija','Namjena','Dimenzije','Lokacija','Kol.','Min.','Status','Dobavljač','Cijena'],
-      ...tools.map(t => [t.name,t.internal_id,t.category,t.purpose,t.dimensions,t.storage_location,t.current_quantity,t.min_quantity,t.status,t.supplier,t.unit_price])
-    ].map(r => r.map(v => `"${v||''}"`).join(',')).join('\n')
-    const blob = new Blob(['\uFEFF'+csv], { type:'text/csv;charset=utf-8' })
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    a.download = `deer_alatnica_${new Date().toISOString().slice(0,10)}.csv`
-    a.click()
-    return true
-  }
-}
-
-// ─── Tab bar ─────────────────────────────────────────────────────────────────
-function TabBar({ tabs, active, onSelect }) {
-  return (
-    <div style={{ display:'flex', gap:4, marginBottom:22, borderBottom:`1px solid #4A6B6844` }}>
-      {tabs.map(t => (
-        <button key={t.key} onClick={() => onSelect(t.key)} style={{
-          background: active===t.key ? '#F5BC54' : 'transparent',
-          color: active===t.key ? '#1a2a28' : '#7AA8A4',
-          border: 'none', borderRadius:'8px 8px 0 0', padding:'8px 18px',
-          fontSize:11, fontWeight:700, cursor:'pointer', letterSpacing:1.2,
-          fontFamily:"'Chakra Petch',sans-serif", textTransform:'uppercase',
-          borderBottom: active===t.key ? '2px solid #F5BC54' : '2px solid transparent',
-          transition:'all .2s', position:'relative'
-        }}>
-          {t.icon} {t.label}
-          {t.badge > 0 && <span style={{ position:'absolute', top:2, right:2, background:'#F87171', color:'#fff', borderRadius:'50%', width:14, height:14, fontSize:8, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:900 }}>{t.badge}</span>}
-        </button>
-      ))}
-    </div>
-  )
-}
-
-// ─── Photo upload component ───────────────────────────────────────────────────
-function PhotoUpload({ currentUrl, onUpload, toolId }) {
-  const [uploading, setUploading] = useState(false)
-  const fileRef = useRef()
-
-  const handleFile = async (file) => {
-    if (!file || !file.type.startsWith('image/')) return
-    setUploading(true)
-    try {
-      const reader = new FileReader()
-      reader.onload = async (e) => {
-        try {
-          // Try multipart upload first
-          const formData = new FormData()
-          formData.append('photo', file)
-          const r = await fetch('/api/uploads/tool-photo', {
-            method:'POST',
-            headers: { Authorization: `Bearer ${localStorage.getItem('deer_token')}` },
-            body: formData
-          })
-          const data = await r.json()
-          if (data.url) { onUpload(data.url); return }
-        } catch(e) {}
-        // Fallback: base64
-        try {
-          const r = await fetch('/api/uploads/tool-photo', {
-            method:'POST',
-            headers: { 'Content-Type':'application/json', Authorization: `Bearer ${localStorage.getItem('deer_token')}` },
-            body: JSON.stringify({ base64: e.target.result, filename: file.name })
-          })
-          const data = await r.json()
-          if (data.url) onUpload(data.url)
-        } catch(err) {
-          // Store as data URL locally
-          onUpload(e.target.result)
+    },
+    "node_modules/decimal.js-light": {
+      "version": "2.5.1",
+      "resolved": "https://registry.npmjs.org/decimal.js-light/-/decimal.js-light-2.5.1.tgz",
+      "integrity": "sha512-qIMFpTMZmny+MMIitAB6D7iVPEorVw6YQRWkvarTkT4tBeSLLiHzcwj6q0MmYSFCiVpiqPJTJEYIrpcPzVEIvg==",
+      "license": "MIT"
+    },
+    "node_modules/delayed-stream": {
+      "version": "1.0.0",
+      "resolved": "https://registry.npmjs.org/delayed-stream/-/delayed-stream-1.0.0.tgz",
+      "integrity": "sha512-ZySD7Nf91aLB0RxL4KGrKHBXl7Eds1DAmEdcoVawXnLD7SDhpNgtuII2aAkg7a7QS41jxPSZ17p4VdGnMHk3MQ==",
+      "license": "MIT",
+      "engines": {
+        "node": ">=0.4.0"
+      }
+    },
+    "node_modules/dom-helpers": {
+      "version": "5.2.1",
+      "resolved": "https://registry.npmjs.org/dom-helpers/-/dom-helpers-5.2.1.tgz",
+      "integrity": "sha512-nRCa7CK3VTrM2NmGkIy4cbK7IZlgBE/PYMn55rrXefr5xXDP0LdtfPnblFDoVdcAfslJ7or6iqAUnx0CCGIWQA==",
+      "license": "MIT",
+      "dependencies": {
+        "@babel/runtime": "^7.8.7",
+        "csstype": "^3.0.2"
+      }
+    },
+    "node_modules/dompurify": {
+      "version": "2.5.9",
+      "resolved": "https://registry.npmjs.org/dompurify/-/dompurify-2.5.9.tgz",
+      "integrity": "sha512-i6mvVmWN4xo9LrhCOZrDgSs9noW6nOahbrmzjRbPF36YPyj5Ue5lgok0MHDWkG7xzpWFO2OYttXdzM7rJxHvNA==",
+      "license": "(MPL-2.0 OR Apache-2.0)",
+      "optional": true
+    },
+    "node_modules/dunder-proto": {
+      "version": "1.0.1",
+      "resolved": "https://registry.npmjs.org/dunder-proto/-/dunder-proto-1.0.1.tgz",
+      "integrity": "sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A==",
+      "license": "MIT",
+      "dependencies": {
+        "call-bind-apply-helpers": "^1.0.1",
+        "es-errors": "^1.3.0",
+        "gopd": "^1.2.0"
+      },
+      "engines": {
+        "node": ">= 0.4"
+      }
+    },
+    "node_modules/electron-to-chromium": {
+      "version": "1.5.307",
+      "resolved": "https://registry.npmjs.org/electron-to-chromium/-/electron-to-chromium-1.5.307.tgz",
+      "integrity": "sha512-5z3uFKBWjiNR44nFcYdkcXjKMbg5KXNdciu7mhTPo9tB7NbqSNP2sSnGR+fqknZSCwKkBN+oxiiajWs4dT6ORg==",
+      "dev": true,
+      "license": "ISC"
+    },
+    "node_modules/es-define-property": {
+      "version": "1.0.1",
+      "resolved": "https://registry.npmjs.org/es-define-property/-/es-define-property-1.0.1.tgz",
+      "integrity": "sha512-e3nRfgfUZ4rNGL232gUgX06QNyyez04KdjFrF+LTRoOXmrOgFKDg4BCdsjW8EnT69eqdYGmRpJwiPVYNrCaW3g==",
+      "license": "MIT",
+      "engines": {
+        "node": ">= 0.4"
+      }
+    },
+    "node_modules/es-errors": {
+      "version": "1.3.0",
+      "resolved": "https://registry.npmjs.org/es-errors/-/es-errors-1.3.0.tgz",
+      "integrity": "sha512-Zf5H2Kxt2xjTvbJvP2ZWLEICxA6j+hAmMzIlypy4xcBg1vKVnx89Wy0GbS+kf5cwCVFFzdCFh2XSCFNULS6csw==",
+      "license": "MIT",
+      "engines": {
+        "node": ">= 0.4"
+      }
+    },
+    "node_modules/es-object-atoms": {
+      "version": "1.1.1",
+      "resolved": "https://registry.npmjs.org/es-object-atoms/-/es-object-atoms-1.1.1.tgz",
+      "integrity": "sha512-FGgH2h8zKNim9ljj7dankFPcICIK9Cp5bm+c2gQSYePhpaG5+esrLODihIorn+Pe6FGJzWhXQotPv73jTaldXA==",
+      "license": "MIT",
+      "dependencies": {
+        "es-errors": "^1.3.0"
+      },
+      "engines": {
+        "node": ">= 0.4"
+      }
+    },
+    "node_modules/es-set-tostringtag": {
+      "version": "2.1.0",
+      "resolved": "https://registry.npmjs.org/es-set-tostringtag/-/es-set-tostringtag-2.1.0.tgz",
+      "integrity": "sha512-j6vWzfrGVfyXxge+O0x5sh6cvxAog0a/4Rdd2K36zCMV5eJ+/+tOAngRO8cODMNWbVRdVlmGZQL2YS3yR8bIUA==",
+      "license": "MIT",
+      "dependencies": {
+        "es-errors": "^1.3.0",
+        "get-intrinsic": "^1.2.6",
+        "has-tostringtag": "^1.0.2",
+        "hasown": "^2.0.2"
+      },
+      "engines": {
+        "node": ">= 0.4"
+      }
+    },
+    "node_modules/esbuild": {
+      "version": "0.21.5",
+      "resolved": "https://registry.npmjs.org/esbuild/-/esbuild-0.21.5.tgz",
+      "integrity": "sha512-mg3OPMV4hXywwpoDxu3Qda5xCKQi+vCTZq8S9J/EpkhB2HzKXq4SNFZE3+NK93JYxc8VMSep+lOUSC/RVKaBqw==",
+      "dev": true,
+      "hasInstallScript": true,
+      "license": "MIT",
+      "bin": {
+        "esbuild": "bin/esbuild"
+      },
+      "engines": {
+        "node": ">=12"
+      },
+      "optionalDependencies": {
+        "@esbuild/aix-ppc64": "0.21.5",
+        "@esbuild/android-arm": "0.21.5",
+        "@esbuild/android-arm64": "0.21.5",
+        "@esbuild/android-x64": "0.21.5",
+        "@esbuild/darwin-arm64": "0.21.5",
+        "@esbuild/darwin-x64": "0.21.5",
+        "@esbuild/freebsd-arm64": "0.21.5",
+        "@esbuild/freebsd-x64": "0.21.5",
+        "@esbuild/linux-arm": "0.21.5",
+        "@esbuild/linux-arm64": "0.21.5",
+        "@esbuild/linux-ia32": "0.21.5",
+        "@esbuild/linux-loong64": "0.21.5",
+        "@esbuild/linux-mips64el": "0.21.5",
+        "@esbuild/linux-ppc64": "0.21.5",
+        "@esbuild/linux-riscv64": "0.21.5",
+        "@esbuild/linux-s390x": "0.21.5",
+        "@esbuild/linux-x64": "0.21.5",
+        "@esbuild/netbsd-x64": "0.21.5",
+        "@esbuild/openbsd-x64": "0.21.5",
+        "@esbuild/sunos-x64": "0.21.5",
+        "@esbuild/win32-arm64": "0.21.5",
+        "@esbuild/win32-ia32": "0.21.5",
+        "@esbuild/win32-x64": "0.21.5"
+      }
+    },
+    "node_modules/escalade": {
+      "version": "3.2.0",
+      "resolved": "https://registry.npmjs.org/escalade/-/escalade-3.2.0.tgz",
+      "integrity": "sha512-WUj2qlxaQtO4g6Pq5c29GTcWGDyd8itL8zTlipgECz3JesAiiOKotd8JU6otB3PACgG6xkJUyVhboMS+bje/jA==",
+      "dev": true,
+      "license": "MIT",
+      "engines": {
+        "node": ">=6"
+      }
+    },
+    "node_modules/eventemitter3": {
+      "version": "4.0.7",
+      "resolved": "https://registry.npmjs.org/eventemitter3/-/eventemitter3-4.0.7.tgz",
+      "integrity": "sha512-8guHBZCwKnFhYdHr2ysuRWErTwhoN2X8XELRlrRwpmfeY2jjuUN4taQMsULKUVo1K4DvZl+0pgfyoysHxvmvEw==",
+      "license": "MIT"
+    },
+    "node_modules/fast-equals": {
+      "version": "5.4.0",
+      "resolved": "https://registry.npmjs.org/fast-equals/-/fast-equals-5.4.0.tgz",
+      "integrity": "sha512-jt2DW/aNFNwke7AUd+Z+e6pz39KO5rzdbbFCg2sGafS4mk13MI7Z8O5z9cADNn5lhGODIgLwug6TZO2ctf7kcw==",
+      "license": "MIT",
+      "engines": {
+        "node": ">=6.0.0"
+      }
+    },
+    "node_modules/fflate": {
+      "version": "0.8.2",
+      "resolved": "https://registry.npmjs.org/fflate/-/fflate-0.8.2.tgz",
+      "integrity": "sha512-cPJU47OaAoCbg0pBvzsgpTPhmhqI5eJjh/JIu8tPj5q+T7iLvW/JAYUqmE7KOB4R1ZyEhzBaIQpQpardBF5z8A==",
+      "license": "MIT"
+    },
+    "node_modules/follow-redirects": {
+      "version": "1.15.11",
+      "resolved": "https://registry.npmjs.org/follow-redirects/-/follow-redirects-1.15.11.tgz",
+      "integrity": "sha512-deG2P0JfjrTxl50XGCDyfI97ZGVCxIpfKYmfyrQ54n5FO/0gfIES8C/Psl6kWVDolizcaaxZJnTS0QSMxvnsBQ==",
+      "funding": [
+        {
+          "type": "individual",
+          "url": "https://github.com/sponsors/RubenVerborgh"
         }
-        setUploading(false)
+      ],
+      "license": "MIT",
+      "engines": {
+        "node": ">=4.0"
+      },
+      "peerDependenciesMeta": {
+        "debug": {
+          "optional": true
+        }
       }
-      reader.readAsDataURL(file)
-    } catch(e) { setUploading(false) }
-  }
-
-  return (
-    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:10 }}>
-      {currentUrl ? (
-        <div style={{ position:'relative' }}>
-          <img src={currentUrl} alt="Alat" style={{ width:120, height:120, objectFit:'cover', borderRadius:10, border:`2px solid #4A6B68` }}/>
-          <button onClick={() => onUpload('')} style={{ position:'absolute', top:-6, right:-6, background:'#F87171', border:'none', borderRadius:'50%', width:20, height:20, color:'#fff', cursor:'pointer', fontSize:10 }}>✕</button>
-        </div>
-      ) : (
-        <div onClick={() => fileRef.current?.click()} style={{ width:120, height:120, borderRadius:10, border:`2px dashed #4A6B68`, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', cursor:'pointer', background:'#243330', gap:6 }}
-          onDragOver={e=>{e.preventDefault();e.currentTarget.style.borderColor='#F5BC54'}}
-          onDragLeave={e=>{e.currentTarget.style.borderColor='#4A6B68'}}
-          onDrop={e=>{e.preventDefault();handleFile(e.dataTransfer.files[0])}}>
-          <span style={{ fontSize:28, opacity:.4 }}>📷</span>
-          <span style={{ fontSize:9, color:'#5A8480', textAlign:'center' }}>{uploading ? 'Učitava...' : 'Dodaj foto'}</span>
-        </div>
-      )}
-      <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{ display:'none' }} onChange={e => handleFile(e.target.files[0])}/>
-      {!currentUrl && <button onClick={() => fileRef.current?.click()} style={{ fontSize:10, color:'#7AA8A4', background:'transparent', border:`1px solid #4A6B68`, borderRadius:4, padding:'3px 10px', cursor:'pointer' }}>
-        {uploading ? '📤 Učitava...' : '📷 Odaberi / Snimi'}
-      </button>}
-    </div>
-  )
-}
-
-// ─── QR Modal ─────────────────────────────────────────────────────────────────
-function QRModal({ open, onClose, tool }) {
-  const [qrUrl, setQrUrl] = useState('')
-  const canvasRef = useRef()
-
-  useEffect(() => {
-    if (open && tool) {
-      const qrText = `DEER-TOOL:${tool.id}|${tool.internal_id||''}|${tool.name}`
-      generateQRDataURL(qrText).then(url => setQrUrl(url))
-    }
-  }, [open, tool])
-
-  if (!open || !tool) return null
-  const catColor = CAT_COLOR[tool.category] || '#51FFFF'
-
-  const print = () => {
-    const w = window.open('', '_blank')
-    w.document.write(`
-      <html><head><title>QR — ${tool.name}</title>
-      <style>body{font-family:monospace;text-align:center;padding:20px;background:#fff}
-      .card{border:2px solid #000;border-radius:8px;padding:16px;display:inline-block;max-width:220px}
-      h2{font-size:14px;margin:0 0 8px}p{font-size:10px;color:#555;margin:2px 0}</style>
-      </head><body>
-      <div class="card">
-        <h2>${tool.name}</h2>
-        ${qrUrl ? `<img src="${qrUrl}" style="width:180px;height:180px"/>` : ''}
-        <p>ID: ${tool.internal_id||'—'}</p>
-        <p>Kat: ${tool.category||'—'} · ${tool.dimensions||'—'}</p>
-        <p>Lok: ${tool.storage_location||'—'}</p>
-        <p style="font-size:8px;margin-top:8px;color:#999">DEER MES · ${new Date().toLocaleDateString('hr')}</p>
-      </div>
-      <script>window.onload=()=>{window.print();window.close()}<\/script>
-      </body></html>
-    `)
-    w.document.close()
-  }
-
-  return (
-    <Modal open={open} onClose={onClose} title={`QR Naljepnica — ${tool.name}`} width={360}>
-      <div style={{ textAlign:'center' }}>
-        <div style={{ background:'#fff', borderRadius:12, padding:20, display:'inline-block', marginBottom:16, boxShadow:'0 4px 20px rgba(0,0,0,.3)' }}>
-          {qrUrl ? <img src={qrUrl} style={{ width:180, height:180, display:'block' }}/> : <div style={{ width:180, height:180, background:'#f0f0f0', display:'flex', alignItems:'center', justifyContent:'center' }}>⟳</div>}
-        </div>
-        <div style={{ background:'#fff', borderRadius:8, padding:'10px 16px', marginBottom:14, fontSize:11, color:'#243330', fontFamily:'monospace', lineHeight:1.8 }}>
-          <div style={{ fontWeight:700, fontSize:13 }}>{tool.name}</div>
-          <div>ID: {tool.internal_id||'—'}</div>
-          <div>Kat: {tool.category} · {tool.dimensions||'—'}</div>
-          <div>Lok: {tool.storage_location||'—'}</div>
-        </div>
-        <div style={{ display:'flex', gap:8, justifyContent:'center' }}>
-          <Btn onClick={print}>🖨️ Ispis naljepnice</Btn>
-          {qrUrl && <Btn v="secondary" onClick={() => { const a=document.createElement('a'); a.href=qrUrl; a.download=`qr_${tool.internal_id||tool.id}.png`; a.click() }}>⬇ Preuzmi PNG</Btn>}
-        </div>
-      </div>
-    </Modal>
-  )
-}
-
-// ─── Calibration modal ───────────────────────────────────────────────────────
-function CalibrationModal({ open, onClose, tool, onSave }) {
-  const [form, setForm] = useState({ calibration_date: new Date().toISOString().slice(0,10), next_date:'', performed_by:'', result:'passed', notes:'', certificate_ref:'' })
-  const [saving, setSaving] = useState(false)
-  const [history, setHistory] = useState([])
-  const f = (k,v) => setForm(p=>({...p,[k]:v}))
-
-  useEffect(() => {
-    if (open && tool) {
-      api.get(`/tools/${tool.id}/calibration`).then(r => setHistory(r.data)).catch(()=>{})
-    }
-  }, [open, tool])
-
-  const save = async () => {
-    setSaving(true)
-    try { await onSave(form); onClose() }
-    catch(e) {}
-    finally { setSaving(false) }
-  }
-
-  if (!open || !tool) return null
-  return (
-    <Modal open={open} onClose={onClose} title={`Kalibracija — ${tool.name}`} width={540}>
-      <SectionTitle>Nova kalibracija</SectionTitle>
-      <FGrid>
-        <Field label="Datum kalibracije" req><Inp type="date" value={form.calibration_date} onChange={e=>f('calibration_date',e.target.value)}/></Field>
-        <Field label="Sljedeća kalibracija"><Inp type="date" value={form.next_date} onChange={e=>f('next_date',e.target.value)}/></Field>
-        <Field label="Tko je kalibrirao"><Inp placeholder="Ime, tvrtka..." value={form.performed_by} onChange={e=>f('performed_by',e.target.value)}/></Field>
-        <Field label="Rezultat">
-          <Sel value={form.result} onChange={e=>f('result',e.target.value)}>
-            <option value="passed">✓ Prošlo</option>
-            <option value="adjusted">~ Podešeno</option>
-            <option value="failed">✗ Nije prošlo</option>
-          </Sel>
-        </Field>
-        <Field label="Broj certifikata"><Inp placeholder="CAL-2024-001" value={form.certificate_ref} onChange={e=>f('certificate_ref',e.target.value)}/></Field>
-        <Field label="Napomena"><Inp placeholder="Opcijsko..." value={form.notes} onChange={e=>f('notes',e.target.value)}/></Field>
-      </FGrid>
-      <div style={{ display:'flex', gap:10, justifyContent:'flex-end', marginTop:16 }}>
-        <Btn v="secondary" onClick={onClose}>Odustani</Btn>
-        <Btn onClick={save} disabled={saving}>{saving?'Sprema...':'📋 Spremi kalibraciju'}</Btn>
-      </div>
-      {history.length > 0 && <>
-        <SectionTitle style={{ marginTop:20 }}>Historija kalibracija</SectionTitle>
-        <div style={{ maxHeight:180, overflowY:'auto' }}>
-          {history.map((h,i) => (
-            <div key={i} style={{ display:'flex', gap:10, padding:'8px 0', borderBottom:`1px solid #4A6B6822`, fontSize:11 }}>
-              <span style={{ color:h.result==='passed'?'#4ADE80':h.result==='adjusted'?'#F5BC54':'#F87171', fontWeight:700 }}>
-                {h.result==='passed'?'✓':h.result==='adjusted'?'~':'✗'}
-              </span>
-              <span style={{ color:'#e8f0ee' }}>{h.calibration_date}</span>
-              {h.next_date && <span style={{ color:'#7AA8A4' }}>→ {h.next_date}</span>}
-              {h.performed_by && <span style={{ color:'#5A8480' }}>{h.performed_by}</span>}
-              {h.certificate_ref && <span style={{ color:'#F5BC54', fontFamily:'monospace' }}>{h.certificate_ref}</span>}
-            </div>
-          ))}
-        </div>
-      </>}
-    </Modal>
-  )
-}
-
-// ─── Usage link modal ─────────────────────────────────────────────────────────
-function UsageModal({ open, onClose, tool, onSave }) {
-  const [orders, setOrders] = useState([])
-  const [form, setForm] = useState({ order_id:'', quantity_used:1, operation:'', notes:'' })
-  const [usage, setUsage] = useState([])
-  const [saving, setSaving] = useState(false)
-  const f = (k,v) => setForm(p=>({...p,[k]:v}))
-
-  useEffect(() => {
-    if (open && tool) {
-      api.get('/orders', { params:{ limit:100 } }).then(r => setOrders(r.data?.orders || r.data || [])).catch(()=>{})
-      api.get(`/tools/${tool.id}/usage`).then(r => setUsage(r.data)).catch(()=>{})
-    }
-  }, [open, tool])
-
-  const save = async () => {
-    setSaving(true)
-    try { await onSave(form); api.get(`/tools/${tool.id}/usage`).then(r=>setUsage(r.data)).catch(()=>{}); setForm({order_id:'',quantity_used:1,operation:'',notes:''}) }
-    catch(e) {}
-    finally { setSaving(false) }
-  }
-
-  if (!open || !tool) return null
-  return (
-    <Modal open={open} onClose={onClose} title={`Evidencija korištenja — ${tool.name}`} width={540}>
-      <SectionTitle>Novo korištenje</SectionTitle>
-      <FGrid>
-        <Field label="Proizvodni nalog">
-          <Sel value={form.order_id} onChange={e=>f('order_id',e.target.value)}>
-            <option value="">Bez naloga (interni rad)</option>
-            {orders.slice(0,50).map(o => <option key={o.id} value={o.id}>{o.order_number||o.id.slice(0,8)} — {o.product_name||o.name||''}</option>)}
-          </Sel>
-        </Field>
-        <Field label="Količina (kom)"><Inp type="number" min="1" value={form.quantity_used} onChange={e=>f('quantity_used',parseInt(e.target.value)||1)}/></Field>
-        <Field label="Operacija"><Inp placeholder="Glodanje, Bušenje..." value={form.operation} onChange={e=>f('operation',e.target.value)}/></Field>
-        <Field label="Napomena"><Inp placeholder="..." value={form.notes} onChange={e=>f('notes',e.target.value)}/></Field>
-      </FGrid>
-      <div style={{ display:'flex', gap:10, justifyContent:'flex-end', marginTop:16 }}>
-        <Btn v="secondary" onClick={onClose}>Zatvori</Btn>
-        <Btn onClick={save} disabled={saving}>{saving?'Sprema...':'📝 Evidentiraj'}</Btn>
-      </div>
-      {usage.length > 0 && <>
-        <SectionTitle style={{ marginTop:20 }}>Zadnja korištenja</SectionTitle>
-        <div style={{ maxHeight:200, overflowY:'auto' }}>
-          {usage.map((u,i) => (
-            <div key={i} style={{ display:'flex', gap:10, padding:'7px 0', borderBottom:`1px solid #4A6B6822`, fontSize:11 }}>
-              <span style={{ color:'#F5BC54', fontWeight:600 }}>×{u.quantity_used}</span>
-              {u.order_number && <span style={{ color:'#51FFFF', fontFamily:'monospace' }}>{u.order_number}</span>}
-              {u.operation && <span style={{ color:'#e8f0ee' }}>{u.operation}</span>}
-              <span style={{ color:'#5A8480', marginLeft:'auto' }}>{u.user_name} · {ago(u.used_at)}</span>
-            </div>
-          ))}
-        </div>
-      </>}
-    </Modal>
-  )
-}
-
-// ─── Email alert modal ────────────────────────────────────────────────────────
-function AlertModal({ open, onClose, criticalCount }) {
-  const [email, setEmail] = useState('')
-  const [sending, setSending] = useState(false)
-  const [result, setResult] = useState(null)
-
-  const send = async () => {
-    setSending(true)
-    try {
-      const r = await api.post('/tools/alert-critical', { email })
-      setResult(r.data)
-    } catch(e) { setResult({ sent:false, reason:e.message }) }
-    finally { setSending(false) }
-  }
-
-  return (
-    <Modal open={open} onClose={onClose} title="📧 Email upozorenje — kritične zalihe" width={440}>
-      <div style={{ background:'#F8717115', border:'1px solid #F8717144', borderRadius:8, padding:'12px 16px', marginBottom:16 }}>
-        <div style={{ color:'#F87171', fontWeight:600, fontSize:13 }}>⚠ {criticalCount} alata s kritičnim zalihama</div>
-        <div style={{ color:'#5A8480', fontSize:11, marginTop:4 }}>Sustav će poslati detaljan email s popisom svih kritičnih alata.</div>
-      </div>
-      <Field label="Email adresa primatelja" req>
-        <Inp type="email" placeholder="nabava@tvrtka.hr" value={email} onChange={e=>setEmail(e.target.value)}/>
-      </Field>
-      {result && (
-        <div style={{ marginTop:12, padding:'10px 14px', borderRadius:8, background:result.sent?'#4ADE8015':'#F8717115', border:`1px solid ${result.sent?'#4ADE8044':'#F8717144'}`, fontSize:12, color:result.sent?'#4ADE80':'#F87171' }}>
-          {result.sent ? '✓ Email uspješno poslan!' : `Email nije poslan: ${result.reason||'SMTP nije konfiguriran'}`}
-          {!result.sent && <div style={{ color:'#5A8480', fontSize:11, marginTop:4 }}>Konfigurirajte SMTP u .env fajlu da aktivirate email notifikacije.</div>}
-        </div>
-      )}
-      <div style={{ display:'flex', gap:10, justifyContent:'flex-end', marginTop:16 }}>
-        <Btn v="secondary" onClick={onClose}>Zatvori</Btn>
-        <Btn onClick={send} disabled={sending||!email}>{sending?'Šalje...':'📧 Pošalji upozorenje'}</Btn>
-      </div>
-    </Modal>
-  )
-}
-
-// ─── Tool Detail Drawer ───────────────────────────────────────────────────────
-function ToolDetail({ tool, onClose, onEdit, onQty, onQR, onCalib, onUsage, canEdit }) {
-  if (!tool) return null
-  const catColor = CAT_COLOR[tool.category] || '#51FFFF'
-  const inf = (label, val, mono, color) => val ? (
-    <div style={{ marginBottom:10 }}>
-      <div style={{ fontSize:9, color:'#7AA8A4', letterSpacing:1.4, textTransform:'uppercase', marginBottom:2, fontFamily:"'Chakra Petch',sans-serif" }}>{label}</div>
-      <div style={{ fontSize:13, color:color||'#e8f0ee', fontFamily:mono?'monospace':'inherit' }}>{val}</div>
-    </div>
-  ) : null
-  return (
-    <div style={{ position:'fixed', right:0, top:0, bottom:0, width:380, background:'#2B3C3A', borderLeft:`1px solid #4A6B68`, zIndex:200, overflowY:'auto', boxShadow:'-8px 0 40px rgba(0,0,0,.5)' }}>
-      {/* Photo + header */}
-      <div style={{ position:'relative' }}>
-        {tool.photo_url ? (
-          <img src={tool.photo_url} alt={tool.name} style={{ width:'100%', height:160, objectFit:'cover' }}/>
-        ) : (
-          <div style={{ width:'100%', height:100, background:`linear-gradient(135deg, ${catColor}22, #243330)`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:40, color:catColor }}>
-            {CAT_ICON[tool.category]||'⚙'}
-          </div>
-        )}
-        <button onClick={onClose} style={{ position:'absolute', top:10, right:10, background:'rgba(0,0,0,.5)', border:'none', color:'#fff', fontSize:18, cursor:'pointer', borderRadius:'50%', width:28, height:28, display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
-      </div>
-      <div style={{ padding:'16px 20px 8px' }}>
-        <div style={{ fontWeight:700, fontSize:17, color:'#e8f0ee', lineHeight:1.3 }}>{tool.name}</div>
-        <div style={{ fontSize:11, color:'#5A8480', fontFamily:'monospace', marginTop:3 }}>{tool.internal_id}</div>
-        <div style={{ marginTop:8, display:'flex', gap:6, flexWrap:'wrap' }}>
-          <StatusBadge status={tool.status}/>
-          {tool.category && <Badge type="teal">{tool.category}</Badge>}
-          {tool.requires_calibration && <Badge type="blue">📋 Kalibracija</Badge>}
-        </div>
-      </div>
-
-      {/* Action buttons */}
-      {canEdit && (
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:6, padding:'0 16px 16px' }}>
-          <button onClick={()=>onQty(tool)} style={{ background:'#324543', border:'1px solid #4A6B68', borderRadius:8, padding:'8px 4px', color:'#C8DDD9', fontSize:10, cursor:'pointer', fontWeight:600, display:'flex', flexDirection:'column', alignItems:'center', gap:3 }}>
-            <span style={{ fontSize:16 }}>±</span>Korekcija
-          </button>
-          <button onClick={()=>onQR(tool)} style={{ background:'#324543', border:'1px solid #4A6B68', borderRadius:8, padding:'8px 4px', color:'#C8DDD9', fontSize:10, cursor:'pointer', fontWeight:600, display:'flex', flexDirection:'column', alignItems:'center', gap:3 }}>
-            <span style={{ fontSize:16 }}>▦</span>QR Kod
-          </button>
-          {tool.requires_calibration && <button onClick={()=>onCalib(tool)} style={{ background:'#324543', border:'1px solid #60A5FA66', borderRadius:8, padding:'8px 4px', color:'#60A5FA', fontSize:10, cursor:'pointer', fontWeight:600, display:'flex', flexDirection:'column', alignItems:'center', gap:3 }}>
-            <span style={{ fontSize:16 }}>📋</span>Kalib.
-          </button>}
-          <button onClick={()=>onUsage(tool)} style={{ background:'#324543', border:'1px solid #4ADE8044', borderRadius:8, padding:'8px 4px', color:'#4ADE80', fontSize:10, cursor:'pointer', fontWeight:600, display:'flex', flexDirection:'column', alignItems:'center', gap:3 }}>
-            <span style={{ fontSize:16 }}>📝</span>Korištenje
-          </button>
-          <button onClick={()=>onEdit(tool)} style={{ background:'#F5BC5422', border:'1px solid #F5BC5466', borderRadius:8, padding:'8px 4px', color:'#F5BC54', fontSize:10, cursor:'pointer', fontWeight:600, display:'flex', flexDirection:'column', alignItems:'center', gap:3 }}>
-            <span style={{ fontSize:16 }}>✏</span>Uredi
-          </button>
-        </div>
-      )}
-
-      <div style={{ padding:'0 20px 20px' }}>
-        {/* Stock */}
-        <div style={{ background:'#324543', borderRadius:10, padding:'14px', marginBottom:14, border:`1px solid #4A6B68` }}>
-          <div style={{ display:'flex', justifyContent:'space-between', marginBottom:8 }}>
-            <span style={{ fontSize:11, color:'#7AA8A4' }}>Trenutne zalihe</span>
-            <span style={{ fontSize:24, fontWeight:700, color:tool.current_quantity<tool.min_quantity?'#F87171':'#4ADE80', fontFamily:"'Chakra Petch',sans-serif" }}>{tool.current_quantity} <span style={{ fontSize:12, color:'#5A8480' }}>{tool.unit||'kom'}</span></span>
-          </div>
-          <QtyBar current={tool.current_quantity} min={tool.min_quantity} width="100%"/>
-          <div style={{ display:'flex', justifyContent:'space-between', marginTop:8, fontSize:11, color:'#5A8480' }}>
-            <span>Min: {tool.min_quantity} {tool.unit||'kom'}</span>
-            {tool.min_order_quantity && <span>Min. narudžba: {tool.min_order_quantity}</span>}
-          </div>
-          {tool.unit_price && <div style={{ fontSize:12, color:'#F5BC54', marginTop:6, fontWeight:600 }}>
-            {parseFloat(tool.unit_price).toFixed(2)}€/kom · Ukupno: {(parseFloat(tool.unit_price)*tool.current_quantity).toFixed(2)}€
-          </div>}
-        </div>
-
-        {/* Calibration status */}
-        {tool.requires_calibration && (
-          <div style={{ background:'#60A5FA11', border:`1px solid #60A5FA33`, borderRadius:8, padding:'10px 14px', marginBottom:14 }}>
-            <div style={{ fontSize:10, color:'#60A5FA', fontWeight:600, marginBottom:6, textTransform:'uppercase', letterSpacing:1 }}>📋 Kalibracija</div>
-            <div style={{ fontSize:12, display:'flex', justifyContent:'space-between' }}>
-              <span style={{ color:'#5A8480' }}>Zadnja:</span>
-              <span style={{ color:'#e8f0ee' }}>{tool.last_calibration_date ? new Date(tool.last_calibration_date).toLocaleDateString('hr') : '—'}</span>
-            </div>
-            <div style={{ fontSize:12, display:'flex', justifyContent:'space-between', marginTop:4 }}>
-              <span style={{ color:'#5A8480' }}>Sljedeća:</span>
-              <span style={{ color:calibColor(tool.next_calibration_date), fontWeight:600 }}>{calibDays(tool.next_calibration_date)}</span>
-            </div>
-          </div>
-        )}
-
-        <SectionTitle>Detalji</SectionTitle>
-        {inf('Dimenzije', tool.dimensions, true)}
-        {inf('Spoj/prihvat', tool.connection_type, true)}
-        {inf('Lokacija', tool.storage_location)}
-        {inf('Namjena', tool.purpose)}
-        {inf('Rok trajanja', tool.projected_lifespan_days ? tool.projected_lifespan_days+' dana' : null)}
-
-        {tool.machine_applicability && <>
-          <SectionTitle style={{ marginTop:12 }}>Primjena na strojevima</SectionTitle>
-          <div style={{ background:'#324543', borderRadius:8, padding:'10px 14px', border:`1px solid #4A6B6844`, fontSize:12, color:'#C8DDD9', lineHeight:1.8 }}>
-            {tool.machine_applicability.split(',').map((m,i) => <div key={i}>▸ {m.trim()}</div>)}
-          </div>
-        </>}
-
-        {(tool.supplier || tool.supplier_contact) && <>
-          <SectionTitle style={{ marginTop:12 }}>Dobavljač</SectionTitle>
-          {inf('Dobavljač', tool.supplier)}
-          {inf('Kontakt', tool.supplier_contact)}
-        </>}
-
-        {tool.notes && <>
-          <SectionTitle style={{ marginTop:12 }}>Napomena</SectionTitle>
-          <div style={{ fontSize:12, color:'#7AA8A4', lineHeight:1.6 }}>{tool.notes}</div>
-        </>}
-
-        <div style={{ marginTop:12, fontSize:9, color:'#3B5450', fontFamily:'monospace' }}>
-          Kreirano: {tool.created_at ? new Date(tool.created_at).toLocaleString('hr') : '—'}<br/>
-          {tool.created_by_name && 'Kreirao: '+tool.created_by_name}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function OrderStatusBadge({ status }) {
-  const m = { pending:'orange', ordered:'blue', received:'green', cancelled:'gray' }
-  const l = { pending:'Čeka', ordered:'Naručeno', received:'Primljeno', cancelled:'Otkazano' }
-  return <Badge type={m[status]||'gray'}>{l[status]||status}</Badge>
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// MAIN PAGE
-// ═══════════════════════════════════════════════════════════════════════════════
-export default function AlatnicaPage() {
-  const { t, i18n } = useTranslation()
-  const { canEdit } = useAuth()
-  const [tab, setTab] = useState('tools')
-
-  // Data
-  const [tools, setTools] = useState([])
-  const [stats, setStats] = useState({})
-  const [loading, setLoading] = useState(true)
-  const [orders, setOrders] = useState([])
-  const [ordersLoading, setOrdersLoading] = useState(false)
-  const [calibDue, setCalibDue] = useState([])
-
-  // Filters
-  const [search, setSearch] = useState('')
-  const [catF, setCatF] = useState('')
-  const [statF, setStatF] = useState('')
-  const [advFilters, setAdvFilters] = useState(EMPTY_FILTER)
-
-  // Modals
-  const [modal, setModal] = useState(false)
-  const [editItem, setEditItem] = useState(null)
-  const [form, setForm] = useState(EMPTY)
-  const [saving, setSaving] = useState(false)
-  const [detailTool, setDetailTool] = useState(null)
-  const [histModal, setHistModal] = useState(null)
-  const [histItems, setHistItems] = useState([])
-  const [qtyModal, setQtyModal] = useState(null)
-  const [qrModal, setQrModal] = useState(null)
-  const [calibModal, setCalibModal] = useState(null)
-  const [usageModal, setUsageModal] = useState(null)
-  const [alertModal, setAlertModal] = useState(false)
-  const [orderModal, setOrderModal] = useState(false)
-  const [orderForm, setOrderForm] = useState({ tool_id:'', quantity:1, supplier:'', notes:'', expected_date:'', send_email:false })
-  const [orderSaving, setOrderSaving] = useState(false)
-
-  const [toast, showToast] = useToast()
-
-  const f = (k, v) => setForm(p => ({ ...p, [k]: v }))
-  const fo = (k, v) => setOrderForm(p => ({ ...p, [k]: v }))
-
-  // ── Load data ──────────────────────────────────────────────────────────────
-  const load = useCallback(async () => {
-    try {
-      const p = {}
-      if (search) p.search = search
-      if (catF) p.category = catF
-      if (statF) p.status = statF
-      const [toolsRes, statsRes] = await Promise.all([
-        api.get('/tools', { params:p }),
-        api.get('/tools/stats')
-      ])
-      setTools(toolsRes.data.tools || toolsRes.data)
-      setStats(statsRes.data)
-    } catch { setTools([]); setStats({}) }
-    finally { setLoading(false) }
-  }, [search, catF, statF])
-
-  useEffect(() => { load() }, [load])
-
-  const loadOrders = useCallback(async () => {
-    if (tab !== 'orders') return
-    setOrdersLoading(true)
-    try { const r = await api.get('/tools/orders'); setOrders(r.data) }
-    catch { setOrders([]) }
-    finally { setOrdersLoading(false) }
-  }, [tab])
-
-  useEffect(() => { loadOrders() }, [loadOrders])
-
-  const loadCalibDue = useCallback(async () => {
-    if (tab !== 'calibration') return
-    try { const r = await api.get('/tools/calibration-due'); setCalibDue(r.data) }
-    catch { setCalibDue([]) }
-  }, [tab])
-
-  useEffect(() => { loadCalibDue() }, [loadCalibDue])
-
-  // ── Tool CRUD ──────────────────────────────────────────────────────────────
-  const openAdd = () => { setEditItem(null); setForm(EMPTY); setModal(true) }
-  const openEdit = (tool) => {
-    setDetailTool(null)
-    setEditItem(tool)
-    setForm({
-      internalId:tool.internal_id||'', name:tool.name, category:tool.category||'',
-      purpose:tool.purpose||'', dimensions:tool.dimensions||'',
-      connectionType:tool.connection_type||'', storageLocation:tool.storage_location||'',
-      currentQuantity:tool.current_quantity, minQuantity:tool.min_quantity,
-      minOrderQuantity:tool.min_order_quantity||1, projectedLifespanDays:tool.projected_lifespan_days||'',
-      unitPrice:tool.unit_price||'', supplier:tool.supplier||'', supplierContact:tool.supplier_contact||'',
-      machineApplicability:tool.machine_applicability||'', notes:tool.notes||'', unit:tool.unit||'kom',
-      requiresCalibration:tool.requires_calibration||false,
-      calibrationIntervalDays:tool.calibration_interval_days||'',
-      serviceIntervalDays:tool.service_interval_days||'',
-      photoUrl:tool.photo_url||''
-    })
-    setModal(true)
-  }
-  const openHistory = async (tool) => {
-    setHistModal(tool)
-    try { const r = await api.get(`/tools/${tool.id}/history`); setHistItems(r.data) }
-    catch { setHistItems([]) }
-  }
-
-  const save = async () => {
-    if (!form.name) { showToast('Naziv je obavezan!', 'error'); return }
-    setSaving(true)
-    try {
-      if (editItem) {
-        const r = await api.put(`/tools/${editItem.id}`, form)
-        setTools(tools.map(t => t.id===editItem.id ? r.data : t))
-        if (detailTool?.id === editItem.id) setDetailTool(r.data)
-        showToast('✓ Alat ažuriran')
-      } else {
-        const r = await api.post('/tools', form)
-        setTools([r.data, ...tools])
-        showToast('✓ Alat dodan')
+    },
+    "node_modules/form-data": {
+      "version": "4.0.5",
+      "resolved": "https://registry.npmjs.org/form-data/-/form-data-4.0.5.tgz",
+      "integrity": "sha512-8RipRLol37bNs2bhoV67fiTEvdTrbMUYcFTiy3+wuuOnUog2QBHCZWXDRijWQfAkhBj2Uf5UnVaiWwA5vdd82w==",
+      "license": "MIT",
+      "dependencies": {
+        "asynckit": "^0.4.0",
+        "combined-stream": "^1.0.8",
+        "es-set-tostringtag": "^2.1.0",
+        "hasown": "^2.0.2",
+        "mime-types": "^2.1.12"
+      },
+      "engines": {
+        "node": ">= 6"
       }
-      setModal(false); load()
-    } catch(e) { showToast(e.response?.data?.error||'Greška', 'error') }
-    finally { setSaving(false) }
+    },
+    "node_modules/frac": {
+      "version": "1.1.2",
+      "resolved": "https://registry.npmjs.org/frac/-/frac-1.1.2.tgz",
+      "integrity": "sha512-w/XBfkibaTl3YDqASwfDUqkna4Z2p9cFSr1aHDt0WoMTECnRfBOv2WArlZILlqgWlmdIlALXGpM2AOhEk5W3IA==",
+      "license": "Apache-2.0",
+      "engines": {
+        "node": ">=0.8"
+      }
+    },
+    "node_modules/fsevents": {
+      "version": "2.3.3",
+      "resolved": "https://registry.npmjs.org/fsevents/-/fsevents-2.3.3.tgz",
+      "integrity": "sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==",
+      "dev": true,
+      "hasInstallScript": true,
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "darwin"
+      ],
+      "engines": {
+        "node": "^8.16.0 || ^10.6.0 || >=11.0.0"
+      }
+    },
+    "node_modules/function-bind": {
+      "version": "1.1.2",
+      "resolved": "https://registry.npmjs.org/function-bind/-/function-bind-1.1.2.tgz",
+      "integrity": "sha512-7XHNxH7qX9xG5mIwxkhumTox/MIRNcOgDrxWsMt2pAr23WHp6MrRlN7FBSFpCpr+oVO0F744iUgR82nJMfG2SA==",
+      "license": "MIT",
+      "funding": {
+        "url": "https://github.com/sponsors/ljharb"
+      }
+    },
+    "node_modules/gensync": {
+      "version": "1.0.0-beta.2",
+      "resolved": "https://registry.npmjs.org/gensync/-/gensync-1.0.0-beta.2.tgz",
+      "integrity": "sha512-3hN7NaskYvMDLQY55gnW3NQ+mesEAepTqlg+VEbj7zzqEMBVNhzcGYYeqFo/TlYz6eQiFcp1HcsCZO+nGgS8zg==",
+      "dev": true,
+      "license": "MIT",
+      "engines": {
+        "node": ">=6.9.0"
+      }
+    },
+    "node_modules/get-intrinsic": {
+      "version": "1.3.0",
+      "resolved": "https://registry.npmjs.org/get-intrinsic/-/get-intrinsic-1.3.0.tgz",
+      "integrity": "sha512-9fSjSaos/fRIVIp+xSJlE6lfwhES7LNtKaCBIamHsjr2na1BiABJPo0mOjjz8GJDURarmCPGqaiVg5mfjb98CQ==",
+      "license": "MIT",
+      "dependencies": {
+        "call-bind-apply-helpers": "^1.0.2",
+        "es-define-property": "^1.0.1",
+        "es-errors": "^1.3.0",
+        "es-object-atoms": "^1.1.1",
+        "function-bind": "^1.1.2",
+        "get-proto": "^1.0.1",
+        "gopd": "^1.2.0",
+        "has-symbols": "^1.1.0",
+        "hasown": "^2.0.2",
+        "math-intrinsics": "^1.1.0"
+      },
+      "engines": {
+        "node": ">= 0.4"
+      },
+      "funding": {
+        "url": "https://github.com/sponsors/ljharb"
+      }
+    },
+    "node_modules/get-proto": {
+      "version": "1.0.1",
+      "resolved": "https://registry.npmjs.org/get-proto/-/get-proto-1.0.1.tgz",
+      "integrity": "sha512-sTSfBjoXBp89JvIKIefqw7U2CCebsc74kiY6awiGogKtoSGbgjYE/G/+l9sF3MWFPNc9IcoOC4ODfKHfxFmp0g==",
+      "license": "MIT",
+      "dependencies": {
+        "dunder-proto": "^1.0.1",
+        "es-object-atoms": "^1.0.0"
+      },
+      "engines": {
+        "node": ">= 0.4"
+      }
+    },
+    "node_modules/gopd": {
+      "version": "1.2.0",
+      "resolved": "https://registry.npmjs.org/gopd/-/gopd-1.2.0.tgz",
+      "integrity": "sha512-ZUKRh6/kUFoAiTAtTYPZJ3hw9wNxx+BIBOijnlG9PnrJsCcSjs1wyyD6vJpaYtgnzDrKYRSqf3OO6Rfa93xsRg==",
+      "license": "MIT",
+      "engines": {
+        "node": ">= 0.4"
+      },
+      "funding": {
+        "url": "https://github.com/sponsors/ljharb"
+      }
+    },
+    "node_modules/has-symbols": {
+      "version": "1.1.0",
+      "resolved": "https://registry.npmjs.org/has-symbols/-/has-symbols-1.1.0.tgz",
+      "integrity": "sha512-1cDNdwJ2Jaohmb3sg4OmKaMBwuC48sYni5HUw2DvsC8LjGTLK9h+eb1X6RyuOHe4hT0ULCW68iomhjUoKUqlPQ==",
+      "license": "MIT",
+      "engines": {
+        "node": ">= 0.4"
+      },
+      "funding": {
+        "url": "https://github.com/sponsors/ljharb"
+      }
+    },
+    "node_modules/has-tostringtag": {
+      "version": "1.0.2",
+      "resolved": "https://registry.npmjs.org/has-tostringtag/-/has-tostringtag-1.0.2.tgz",
+      "integrity": "sha512-NqADB8VjPFLM2V0VvHUewwwsw0ZWBaIdgo+ieHtK3hasLz4qeCRjYcqfB6AQrBggRKppKF8L52/VqdVsO47Dlw==",
+      "license": "MIT",
+      "dependencies": {
+        "has-symbols": "^1.0.3"
+      },
+      "engines": {
+        "node": ">= 0.4"
+      },
+      "funding": {
+        "url": "https://github.com/sponsors/ljharb"
+      }
+    },
+    "node_modules/hasown": {
+      "version": "2.0.2",
+      "resolved": "https://registry.npmjs.org/hasown/-/hasown-2.0.2.tgz",
+      "integrity": "sha512-0hJU9SCPvmMzIBdZFqNPXWa6dqh7WdH0cII9y+CyS8rG3nL48Bclra9HmKhVVUHyPWNH5Y7xDwAB7bfgSjkUMQ==",
+      "license": "MIT",
+      "dependencies": {
+        "function-bind": "^1.1.2"
+      },
+      "engines": {
+        "node": ">= 0.4"
+      }
+    },
+    "node_modules/html-parse-stringify": {
+      "version": "3.0.1",
+      "resolved": "https://registry.npmjs.org/html-parse-stringify/-/html-parse-stringify-3.0.1.tgz",
+      "integrity": "sha512-KknJ50kTInJ7qIScF3jeaFRpMpE8/lfiTdzf/twXyPBLAGrLRTmkz3AdTnKeh40X8k9L2fdYwEp/42WGXIRGcg==",
+      "license": "MIT",
+      "dependencies": {
+        "void-elements": "3.1.0"
+      }
+    },
+    "node_modules/html2canvas": {
+      "version": "1.4.1",
+      "resolved": "https://registry.npmjs.org/html2canvas/-/html2canvas-1.4.1.tgz",
+      "integrity": "sha512-fPU6BHNpsyIhr8yyMpTLLxAbkaK8ArIBcmZIRiBLiDhjeqvXolaEmDGmELFuX9I4xDcaKKcJl+TKZLqruBbmWA==",
+      "license": "MIT",
+      "optional": true,
+      "dependencies": {
+        "css-line-break": "^2.1.0",
+        "text-segmentation": "^1.0.3"
+      },
+      "engines": {
+        "node": ">=8.0.0"
+      }
+    },
+    "node_modules/i18next": {
+      "version": "23.16.8",
+      "resolved": "https://registry.npmjs.org/i18next/-/i18next-23.16.8.tgz",
+      "integrity": "sha512-06r/TitrM88Mg5FdUXAKL96dJMzgqLE5dv3ryBAra4KCwD9mJ4ndOTS95ZuymIGoE+2hzfdaMak2X11/es7ZWg==",
+      "funding": [
+        {
+          "type": "individual",
+          "url": "https://locize.com"
+        },
+        {
+          "type": "individual",
+          "url": "https://locize.com/i18next.html"
+        },
+        {
+          "type": "individual",
+          "url": "https://www.i18next.com/how-to/faq#i18next-is-awesome.-how-can-i-support-the-project"
+        }
+      ],
+      "license": "MIT",
+      "dependencies": {
+        "@babel/runtime": "^7.23.2"
+      }
+    },
+    "node_modules/internmap": {
+      "version": "2.0.3",
+      "resolved": "https://registry.npmjs.org/internmap/-/internmap-2.0.3.tgz",
+      "integrity": "sha512-5Hh7Y1wQbvY5ooGgPbDaL5iYLAPzMTUrjMulskHLH6wnv/A+1q5rgEaiuqEjB+oxGXIVZs1FF+R/KPN3ZSQYYg==",
+      "license": "ISC",
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/js-tokens": {
+      "version": "4.0.0",
+      "resolved": "https://registry.npmjs.org/js-tokens/-/js-tokens-4.0.0.tgz",
+      "integrity": "sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==",
+      "license": "MIT"
+    },
+    "node_modules/jsesc": {
+      "version": "3.1.0",
+      "resolved": "https://registry.npmjs.org/jsesc/-/jsesc-3.1.0.tgz",
+      "integrity": "sha512-/sM3dO2FOzXjKQhJuo0Q173wf2KOo8t4I8vHy6lF9poUp7bKT0/NHE8fPX23PwfhnykfqnC2xRxOnVw5XuGIaA==",
+      "dev": true,
+      "license": "MIT",
+      "bin": {
+        "jsesc": "bin/jsesc"
+      },
+      "engines": {
+        "node": ">=6"
+      }
+    },
+    "node_modules/json5": {
+      "version": "2.2.3",
+      "resolved": "https://registry.npmjs.org/json5/-/json5-2.2.3.tgz",
+      "integrity": "sha512-XmOWe7eyHYH14cLdVPoyg+GOH3rYX++KpzrylJwSW98t3Nk+U8XOl8FWKOgwtzdb8lXGf6zYwDUzeHMWfxasyg==",
+      "dev": true,
+      "license": "MIT",
+      "bin": {
+        "json5": "lib/cli.js"
+      },
+      "engines": {
+        "node": ">=6"
+      }
+    },
+    "node_modules/jspdf": {
+      "version": "2.5.2",
+      "resolved": "https://registry.npmjs.org/jspdf/-/jspdf-2.5.2.tgz",
+      "integrity": "sha512-myeX9c+p7znDWPk0eTrujCzNjT+CXdXyk7YmJq5nD5V7uLLKmSXnlQ/Jn/kuo3X09Op70Apm0rQSnFWyGK8uEQ==",
+      "license": "MIT",
+      "dependencies": {
+        "@babel/runtime": "^7.23.2",
+        "atob": "^2.1.2",
+        "btoa": "^1.2.1",
+        "fflate": "^0.8.1"
+      },
+      "optionalDependencies": {
+        "canvg": "^3.0.6",
+        "core-js": "^3.6.0",
+        "dompurify": "^2.5.4",
+        "html2canvas": "^1.0.0-rc.5"
+      }
+    },
+    "node_modules/jspdf-autotable": {
+      "version": "3.8.4",
+      "resolved": "https://registry.npmjs.org/jspdf-autotable/-/jspdf-autotable-3.8.4.tgz",
+      "integrity": "sha512-rSffGoBsJYX83iTRv8Ft7FhqfgEL2nLpGAIiqruEQQ3e4r0qdLFbPUB7N9HAle0I3XgpisvyW751VHCqKUVOgQ==",
+      "license": "MIT",
+      "peerDependencies": {
+        "jspdf": "^2.5.1"
+      }
+    },
+    "node_modules/lodash": {
+      "version": "4.17.23",
+      "resolved": "https://registry.npmjs.org/lodash/-/lodash-4.17.23.tgz",
+      "integrity": "sha512-LgVTMpQtIopCi79SJeDiP0TfWi5CNEc/L/aRdTh3yIvmZXTnheWpKjSZhnvMl8iXbC1tFg9gdHHDMLoV7CnG+w==",
+      "license": "MIT"
+    },
+    "node_modules/loose-envify": {
+      "version": "1.4.0",
+      "resolved": "https://registry.npmjs.org/loose-envify/-/loose-envify-1.4.0.tgz",
+      "integrity": "sha512-lyuxPGr/Wfhrlem2CL/UcnUc1zcqKAImBDzukY7Y5F/yQiNdko6+fRLevlw1HgMySw7f611UIY408EtxRSoK3Q==",
+      "license": "MIT",
+      "dependencies": {
+        "js-tokens": "^3.0.0 || ^4.0.0"
+      },
+      "bin": {
+        "loose-envify": "cli.js"
+      }
+    },
+    "node_modules/lru-cache": {
+      "version": "5.1.1",
+      "resolved": "https://registry.npmjs.org/lru-cache/-/lru-cache-5.1.1.tgz",
+      "integrity": "sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w==",
+      "dev": true,
+      "license": "ISC",
+      "dependencies": {
+        "yallist": "^3.0.2"
+      }
+    },
+    "node_modules/lucide-react": {
+      "version": "0.263.1",
+      "resolved": "https://registry.npmjs.org/lucide-react/-/lucide-react-0.263.1.tgz",
+      "integrity": "sha512-keqxAx97PlaEN89PXZ6ki1N8nRjGWtDa4021GFYLNj0RgruM5odbpl8GHTExj0hhPq3sF6Up0gnxt6TSHu+ovw==",
+      "license": "ISC",
+      "peerDependencies": {
+        "react": "^16.5.1 || ^17.0.0 || ^18.0.0"
+      }
+    },
+    "node_modules/math-intrinsics": {
+      "version": "1.1.0",
+      "resolved": "https://registry.npmjs.org/math-intrinsics/-/math-intrinsics-1.1.0.tgz",
+      "integrity": "sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==",
+      "license": "MIT",
+      "engines": {
+        "node": ">= 0.4"
+      }
+    },
+    "node_modules/mime-db": {
+      "version": "1.52.0",
+      "resolved": "https://registry.npmjs.org/mime-db/-/mime-db-1.52.0.tgz",
+      "integrity": "sha512-sPU4uV7dYlvtWJxwwxHD0PuihVNiE7TyAbQ5SWxDCB9mUYvOgroQOwYQQOKPJ8CIbE+1ETVlOoK1UC2nU3gYvg==",
+      "license": "MIT",
+      "engines": {
+        "node": ">= 0.6"
+      }
+    },
+    "node_modules/mime-types": {
+      "version": "2.1.35",
+      "resolved": "https://registry.npmjs.org/mime-types/-/mime-types-2.1.35.tgz",
+      "integrity": "sha512-ZDY+bPm5zTTF+YpCrAU9nK0UgICYPT0QtT1NZWFv4s++TNkcgVaT0g6+4R2uI4MjQjzysHB1zxuWL50hzaeXiw==",
+      "license": "MIT",
+      "dependencies": {
+        "mime-db": "1.52.0"
+      },
+      "engines": {
+        "node": ">= 0.6"
+      }
+    },
+    "node_modules/ms": {
+      "version": "2.1.3",
+      "resolved": "https://registry.npmjs.org/ms/-/ms-2.1.3.tgz",
+      "integrity": "sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==",
+      "dev": true,
+      "license": "MIT"
+    },
+    "node_modules/nanoid": {
+      "version": "3.3.11",
+      "resolved": "https://registry.npmjs.org/nanoid/-/nanoid-3.3.11.tgz",
+      "integrity": "sha512-N8SpfPUnUp1bK+PMYW8qSWdl9U+wwNWI4QKxOYDy9JAro3WMX7p2OeVRF9v+347pnakNevPmiHhNmZ2HbFA76w==",
+      "dev": true,
+      "funding": [
+        {
+          "type": "github",
+          "url": "https://github.com/sponsors/ai"
+        }
+      ],
+      "license": "MIT",
+      "bin": {
+        "nanoid": "bin/nanoid.cjs"
+      },
+      "engines": {
+        "node": "^10 || ^12 || ^13.7 || ^14 || >=15.0.1"
+      }
+    },
+    "node_modules/node-releases": {
+      "version": "2.0.36",
+      "resolved": "https://registry.npmjs.org/node-releases/-/node-releases-2.0.36.tgz",
+      "integrity": "sha512-TdC8FSgHz8Mwtw9g5L4gR/Sh9XhSP/0DEkQxfEFXOpiul5IiHgHan2VhYYb6agDSfp4KuvltmGApc8HMgUrIkA==",
+      "dev": true,
+      "license": "MIT"
+    },
+    "node_modules/object-assign": {
+      "version": "4.1.1",
+      "resolved": "https://registry.npmjs.org/object-assign/-/object-assign-4.1.1.tgz",
+      "integrity": "sha512-rJgTQnkUnH1sFw8yT6VSU3zD3sWmu6sZhIseY8VX+GRu3P6F7Fu+JNDoXfklElbLJSnc3FUQHVe4cU5hj+BcUg==",
+      "license": "MIT",
+      "engines": {
+        "node": ">=0.10.0"
+      }
+    },
+    "node_modules/performance-now": {
+      "version": "2.1.0",
+      "resolved": "https://registry.npmjs.org/performance-now/-/performance-now-2.1.0.tgz",
+      "integrity": "sha512-7EAHlyLHI56VEIdK57uwHdHKIaAGbnXPiw0yWbarQZOKaKpvUIgW0jWRVLiatnM+XXlSwsanIBH/hzGMJulMow==",
+      "license": "MIT",
+      "optional": true
+    },
+    "node_modules/picocolors": {
+      "version": "1.1.1",
+      "resolved": "https://registry.npmjs.org/picocolors/-/picocolors-1.1.1.tgz",
+      "integrity": "sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==",
+      "dev": true,
+      "license": "ISC"
+    },
+    "node_modules/postcss": {
+      "version": "8.5.8",
+      "resolved": "https://registry.npmjs.org/postcss/-/postcss-8.5.8.tgz",
+      "integrity": "sha512-OW/rX8O/jXnm82Ey1k44pObPtdblfiuWnrd8X7GJ7emImCOstunGbXUpp7HdBrFQX6rJzn3sPT397Wp5aCwCHg==",
+      "dev": true,
+      "funding": [
+        {
+          "type": "opencollective",
+          "url": "https://opencollective.com/postcss/"
+        },
+        {
+          "type": "tidelift",
+          "url": "https://tidelift.com/funding/github/npm/postcss"
+        },
+        {
+          "type": "github",
+          "url": "https://github.com/sponsors/ai"
+        }
+      ],
+      "license": "MIT",
+      "dependencies": {
+        "nanoid": "^3.3.11",
+        "picocolors": "^1.1.1",
+        "source-map-js": "^1.2.1"
+      },
+      "engines": {
+        "node": "^10 || ^12 || >=14"
+      }
+    },
+    "node_modules/prop-types": {
+      "version": "15.8.1",
+      "resolved": "https://registry.npmjs.org/prop-types/-/prop-types-15.8.1.tgz",
+      "integrity": "sha512-oj87CgZICdulUohogVAR7AjlC0327U4el4L6eAvOqCeudMDVU0NThNaV+b9Df4dXgSP1gXMTnPdhfe/2qDH5cg==",
+      "license": "MIT",
+      "dependencies": {
+        "loose-envify": "^1.4.0",
+        "object-assign": "^4.1.1",
+        "react-is": "^16.13.1"
+      }
+    },
+    "node_modules/prop-types/node_modules/react-is": {
+      "version": "16.13.1",
+      "resolved": "https://registry.npmjs.org/react-is/-/react-is-16.13.1.tgz",
+      "integrity": "sha512-24e6ynE2H+OKt4kqsOvNd8kBpV65zoxbA4BVsEOB3ARVWQki/DHzaUoC5KuON/BiccDaCCTZBuOcfZs70kR8bQ==",
+      "license": "MIT"
+    },
+    "node_modules/proxy-from-env": {
+      "version": "1.1.0",
+      "resolved": "https://registry.npmjs.org/proxy-from-env/-/proxy-from-env-1.1.0.tgz",
+      "integrity": "sha512-D+zkORCbA9f1tdWRK0RaCR3GPv50cMxcrz4X8k5LTSUD1Dkw47mKJEZQNunItRTkWwgtaUSo1RVFRIG9ZXiFYg==",
+      "license": "MIT"
+    },
+    "node_modules/raf": {
+      "version": "3.4.1",
+      "resolved": "https://registry.npmjs.org/raf/-/raf-3.4.1.tgz",
+      "integrity": "sha512-Sq4CW4QhwOHE8ucn6J34MqtZCeWFP2aQSmrlroYgqAV1PjStIhJXxYuTgUIfkEk7zTLjmIjLmU5q+fbD1NnOJA==",
+      "license": "MIT",
+      "optional": true,
+      "dependencies": {
+        "performance-now": "^2.1.0"
+      }
+    },
+    "node_modules/react": {
+      "version": "18.3.1",
+      "resolved": "https://registry.npmjs.org/react/-/react-18.3.1.tgz",
+      "integrity": "sha512-wS+hAgJShR0KhEvPJArfuPVN1+Hz1t0Y6n5jLrGQbkb4urgPE/0Rve+1kMB1v/oWgHgm4WIcV+i7F2pTVj+2iQ==",
+      "license": "MIT",
+      "dependencies": {
+        "loose-envify": "^1.1.0"
+      },
+      "engines": {
+        "node": ">=0.10.0"
+      }
+    },
+    "node_modules/react-dom": {
+      "version": "18.3.1",
+      "resolved": "https://registry.npmjs.org/react-dom/-/react-dom-18.3.1.tgz",
+      "integrity": "sha512-5m4nQKp+rZRb09LNH59GM4BxTh9251/ylbKIbpe7TpGxfJ+9kv6BLkLBXIjjspbgbnIBNqlI23tRnTWT0snUIw==",
+      "license": "MIT",
+      "dependencies": {
+        "loose-envify": "^1.1.0",
+        "scheduler": "^0.23.2"
+      },
+      "peerDependencies": {
+        "react": "^18.3.1"
+      }
+    },
+    "node_modules/react-i18next": {
+      "version": "13.5.0",
+      "resolved": "https://registry.npmjs.org/react-i18next/-/react-i18next-13.5.0.tgz",
+      "integrity": "sha512-CFJ5NDGJ2MUyBohEHxljOq/39NQ972rh1ajnadG9BjTk+UXbHLq4z5DKEbEQBDoIhUmmbuS/fIMJKo6VOax1HA==",
+      "license": "MIT",
+      "dependencies": {
+        "@babel/runtime": "^7.22.5",
+        "html-parse-stringify": "^3.0.1"
+      },
+      "peerDependencies": {
+        "i18next": ">= 23.2.3",
+        "react": ">= 16.8.0"
+      },
+      "peerDependenciesMeta": {
+        "react-dom": {
+          "optional": true
+        },
+        "react-native": {
+          "optional": true
+        }
+      }
+    },
+    "node_modules/react-is": {
+      "version": "18.3.1",
+      "resolved": "https://registry.npmjs.org/react-is/-/react-is-18.3.1.tgz",
+      "integrity": "sha512-/LLMVyas0ljjAtoYiPqYiL8VWXzUUdThrmU5+n20DZv+a+ClRoevUzw5JxU+Ieh5/c87ytoTBV9G1FiKfNJdmg==",
+      "license": "MIT"
+    },
+    "node_modules/react-refresh": {
+      "version": "0.17.0",
+      "resolved": "https://registry.npmjs.org/react-refresh/-/react-refresh-0.17.0.tgz",
+      "integrity": "sha512-z6F7K9bV85EfseRCp2bzrpyQ0Gkw1uLoCel9XBVWPg/TjRj94SkJzUTGfOa4bs7iJvBWtQG0Wq7wnI0syw3EBQ==",
+      "dev": true,
+      "license": "MIT",
+      "engines": {
+        "node": ">=0.10.0"
+      }
+    },
+    "node_modules/react-router": {
+      "version": "6.30.3",
+      "resolved": "https://registry.npmjs.org/react-router/-/react-router-6.30.3.tgz",
+      "integrity": "sha512-XRnlbKMTmktBkjCLE8/XcZFlnHvr2Ltdr1eJX4idL55/9BbORzyZEaIkBFDhFGCEWBBItsVrDxwx3gnisMitdw==",
+      "license": "MIT",
+      "dependencies": {
+        "@remix-run/router": "1.23.2"
+      },
+      "engines": {
+        "node": ">=14.0.0"
+      },
+      "peerDependencies": {
+        "react": ">=16.8"
+      }
+    },
+    "node_modules/react-router-dom": {
+      "version": "6.30.3",
+      "resolved": "https://registry.npmjs.org/react-router-dom/-/react-router-dom-6.30.3.tgz",
+      "integrity": "sha512-pxPcv1AczD4vso7G4Z3TKcvlxK7g7TNt3/FNGMhfqyntocvYKj+GCatfigGDjbLozC4baguJ0ReCigoDJXb0ag==",
+      "license": "MIT",
+      "dependencies": {
+        "@remix-run/router": "1.23.2",
+        "react-router": "6.30.3"
+      },
+      "engines": {
+        "node": ">=14.0.0"
+      },
+      "peerDependencies": {
+        "react": ">=16.8",
+        "react-dom": ">=16.8"
+      }
+    },
+    "node_modules/react-smooth": {
+      "version": "4.0.4",
+      "resolved": "https://registry.npmjs.org/react-smooth/-/react-smooth-4.0.4.tgz",
+      "integrity": "sha512-gnGKTpYwqL0Iii09gHobNolvX4Kiq4PKx6eWBCYYix+8cdw+cGo3do906l1NBPKkSWx1DghC1dlWG9L2uGd61Q==",
+      "license": "MIT",
+      "dependencies": {
+        "fast-equals": "^5.0.1",
+        "prop-types": "^15.8.1",
+        "react-transition-group": "^4.4.5"
+      },
+      "peerDependencies": {
+        "react": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0",
+        "react-dom": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0"
+      }
+    },
+    "node_modules/react-transition-group": {
+      "version": "4.4.5",
+      "resolved": "https://registry.npmjs.org/react-transition-group/-/react-transition-group-4.4.5.tgz",
+      "integrity": "sha512-pZcd1MCJoiKiBR2NRxeCRg13uCXbydPnmB4EOeRrY7480qNWO8IIgQG6zlDkm6uRMsURXPuKq0GWtiM59a5Q6g==",
+      "license": "BSD-3-Clause",
+      "dependencies": {
+        "@babel/runtime": "^7.5.5",
+        "dom-helpers": "^5.0.1",
+        "loose-envify": "^1.4.0",
+        "prop-types": "^15.6.2"
+      },
+      "peerDependencies": {
+        "react": ">=16.6.0",
+        "react-dom": ">=16.6.0"
+      }
+    },
+    "node_modules/recharts": {
+      "version": "2.15.4",
+      "resolved": "https://registry.npmjs.org/recharts/-/recharts-2.15.4.tgz",
+      "integrity": "sha512-UT/q6fwS3c1dHbXv2uFgYJ9BMFHu3fwnd7AYZaEQhXuYQ4hgsxLvsUXzGdKeZrW5xopzDCvuA2N41WJ88I7zIw==",
+      "license": "MIT",
+      "dependencies": {
+        "clsx": "^2.0.0",
+        "eventemitter3": "^4.0.1",
+        "lodash": "^4.17.21",
+        "react-is": "^18.3.1",
+        "react-smooth": "^4.0.4",
+        "recharts-scale": "^0.4.4",
+        "tiny-invariant": "^1.3.1",
+        "victory-vendor": "^36.6.8"
+      },
+      "engines": {
+        "node": ">=14"
+      },
+      "peerDependencies": {
+        "react": "^16.0.0 || ^17.0.0 || ^18.0.0 || ^19.0.0",
+        "react-dom": "^16.0.0 || ^17.0.0 || ^18.0.0 || ^19.0.0"
+      }
+    },
+    "node_modules/recharts-scale": {
+      "version": "0.4.5",
+      "resolved": "https://registry.npmjs.org/recharts-scale/-/recharts-scale-0.4.5.tgz",
+      "integrity": "sha512-kivNFO+0OcUNu7jQquLXAxz1FIwZj8nrj+YkOKc5694NbjCvcT6aSZiIzNzd2Kul4o4rTto8QVR9lMNtxD4G1w==",
+      "license": "MIT",
+      "dependencies": {
+        "decimal.js-light": "^2.4.1"
+      }
+    },
+    "node_modules/regenerator-runtime": {
+      "version": "0.13.11",
+      "resolved": "https://registry.npmjs.org/regenerator-runtime/-/regenerator-runtime-0.13.11.tgz",
+      "integrity": "sha512-kY1AZVr2Ra+t+piVaJ4gxaFaReZVH40AKNo7UCX6W+dEwBo/2oZJzqfuN1qLq1oL45o56cPaTXELwrTh8Fpggg==",
+      "license": "MIT",
+      "optional": true
+    },
+    "node_modules/rgbcolor": {
+      "version": "1.0.1",
+      "resolved": "https://registry.npmjs.org/rgbcolor/-/rgbcolor-1.0.1.tgz",
+      "integrity": "sha512-9aZLIrhRaD97sgVhtJOW6ckOEh6/GnvQtdVNfdZ6s67+3/XwLS9lBcQYzEEhYVeUowN7pRzMLsyGhK2i/xvWbw==",
+      "license": "MIT OR SEE LICENSE IN FEEL-FREE.md",
+      "optional": true,
+      "engines": {
+        "node": ">= 0.8.15"
+      }
+    },
+    "node_modules/rollup": {
+      "version": "4.59.0",
+      "resolved": "https://registry.npmjs.org/rollup/-/rollup-4.59.0.tgz",
+      "integrity": "sha512-2oMpl67a3zCH9H79LeMcbDhXW/UmWG/y2zuqnF2jQq5uq9TbM9TVyXvA4+t+ne2IIkBdrLpAaRQAvo7YI/Yyeg==",
+      "dev": true,
+      "license": "MIT",
+      "dependencies": {
+        "@types/estree": "1.0.8"
+      },
+      "bin": {
+        "rollup": "dist/bin/rollup"
+      },
+      "engines": {
+        "node": ">=18.0.0",
+        "npm": ">=8.0.0"
+      },
+      "optionalDependencies": {
+        "@rollup/rollup-android-arm-eabi": "4.59.0",
+        "@rollup/rollup-android-arm64": "4.59.0",
+        "@rollup/rollup-darwin-arm64": "4.59.0",
+        "@rollup/rollup-darwin-x64": "4.59.0",
+        "@rollup/rollup-freebsd-arm64": "4.59.0",
+        "@rollup/rollup-freebsd-x64": "4.59.0",
+        "@rollup/rollup-linux-arm-gnueabihf": "4.59.0",
+        "@rollup/rollup-linux-arm-musleabihf": "4.59.0",
+        "@rollup/rollup-linux-arm64-gnu": "4.59.0",
+        "@rollup/rollup-linux-arm64-musl": "4.59.0",
+        "@rollup/rollup-linux-loong64-gnu": "4.59.0",
+        "@rollup/rollup-linux-loong64-musl": "4.59.0",
+        "@rollup/rollup-linux-ppc64-gnu": "4.59.0",
+        "@rollup/rollup-linux-ppc64-musl": "4.59.0",
+        "@rollup/rollup-linux-riscv64-gnu": "4.59.0",
+        "@rollup/rollup-linux-riscv64-musl": "4.59.0",
+        "@rollup/rollup-linux-s390x-gnu": "4.59.0",
+        "@rollup/rollup-linux-x64-gnu": "4.59.0",
+        "@rollup/rollup-linux-x64-musl": "4.59.0",
+        "@rollup/rollup-openbsd-x64": "4.59.0",
+        "@rollup/rollup-openharmony-arm64": "4.59.0",
+        "@rollup/rollup-win32-arm64-msvc": "4.59.0",
+        "@rollup/rollup-win32-ia32-msvc": "4.59.0",
+        "@rollup/rollup-win32-x64-gnu": "4.59.0",
+        "@rollup/rollup-win32-x64-msvc": "4.59.0",
+        "fsevents": "~2.3.2"
+      }
+    },
+    "node_modules/scheduler": {
+      "version": "0.23.2",
+      "resolved": "https://registry.npmjs.org/scheduler/-/scheduler-0.23.2.tgz",
+      "integrity": "sha512-UOShsPwz7NrMUqhR6t0hWjFduvOzbtv7toDH1/hIrfRNIDBnnBWd0CwJTGvTpngVlmwGCdP9/Zl/tVrDqcuYzQ==",
+      "license": "MIT",
+      "dependencies": {
+        "loose-envify": "^1.1.0"
+      }
+    },
+    "node_modules/semver": {
+      "version": "6.3.1",
+      "resolved": "https://registry.npmjs.org/semver/-/semver-6.3.1.tgz",
+      "integrity": "sha512-BR7VvDCVHO+q2xBEWskxS6DJE1qRnb7DxzUrogb71CWoSficBxYsiAGd+Kl0mmq/MprG9yArRkyrQxTO6XjMzA==",
+      "dev": true,
+      "license": "ISC",
+      "bin": {
+        "semver": "bin/semver.js"
+      }
+    },
+    "node_modules/source-map-js": {
+      "version": "1.2.1",
+      "resolved": "https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.1.tgz",
+      "integrity": "sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==",
+      "dev": true,
+      "license": "BSD-3-Clause",
+      "engines": {
+        "node": ">=0.10.0"
+      }
+    },
+    "node_modules/ssf": {
+      "version": "0.11.2",
+      "resolved": "https://registry.npmjs.org/ssf/-/ssf-0.11.2.tgz",
+      "integrity": "sha512-+idbmIXoYET47hH+d7dfm2epdOMUDjqcB4648sTZ+t2JwoyBFL/insLfB/racrDmsKB3diwsDA696pZMieAC5g==",
+      "license": "Apache-2.0",
+      "dependencies": {
+        "frac": "~1.1.2"
+      },
+      "engines": {
+        "node": ">=0.8"
+      }
+    },
+    "node_modules/stackblur-canvas": {
+      "version": "2.7.0",
+      "resolved": "https://registry.npmjs.org/stackblur-canvas/-/stackblur-canvas-2.7.0.tgz",
+      "integrity": "sha512-yf7OENo23AGJhBriGx0QivY5JP6Y1HbrrDI6WLt6C5auYZXlQrheoY8hD4ibekFKz1HOfE48Ww8kMWMnJD/zcQ==",
+      "license": "MIT",
+      "optional": true,
+      "engines": {
+        "node": ">=0.1.14"
+      }
+    },
+    "node_modules/svg-pathdata": {
+      "version": "6.0.3",
+      "resolved": "https://registry.npmjs.org/svg-pathdata/-/svg-pathdata-6.0.3.tgz",
+      "integrity": "sha512-qsjeeq5YjBZ5eMdFuUa4ZosMLxgr5RZ+F+Y1OrDhuOCEInRMA3x74XdBtggJcj9kOeInz0WE+LgCPDkZFlBYJw==",
+      "license": "MIT",
+      "optional": true,
+      "engines": {
+        "node": ">=12.0.0"
+      }
+    },
+    "node_modules/text-segmentation": {
+      "version": "1.0.3",
+      "resolved": "https://registry.npmjs.org/text-segmentation/-/text-segmentation-1.0.3.tgz",
+      "integrity": "sha512-iOiPUo/BGnZ6+54OsWxZidGCsdU8YbE4PSpdPinp7DeMtUJNJBoJ/ouUSTJjHkh1KntHaltHl/gDs2FC4i5+Nw==",
+      "license": "MIT",
+      "optional": true,
+      "dependencies": {
+        "utrie": "^1.0.2"
+      }
+    },
+    "node_modules/three": {
+      "version": "0.160.0",
+      "resolved": "https://registry.npmjs.org/three/-/three-0.160.0.tgz",
+      "integrity": "sha512-DLU8lc0zNIPkM7rH5/e1Ks1Z8tWCGRq6g8mPowdDJpw1CFBJMU7UoJjC6PefXW7z//SSl0b2+GCw14LB+uDhng==",
+      "license": "MIT"
+    },
+    "node_modules/tiny-invariant": {
+      "version": "1.3.3",
+      "resolved": "https://registry.npmjs.org/tiny-invariant/-/tiny-invariant-1.3.3.tgz",
+      "integrity": "sha512-+FbBPE1o9QAYvviau/qC5SE3caw21q3xkvWKBtja5vgqOWIHHJ3ioaq1VPfn/Szqctz2bU/oYeKd9/z5BL+PVg==",
+      "license": "MIT"
+    },
+    "node_modules/update-browserslist-db": {
+      "version": "1.2.3",
+      "resolved": "https://registry.npmjs.org/update-browserslist-db/-/update-browserslist-db-1.2.3.tgz",
+      "integrity": "sha512-Js0m9cx+qOgDxo0eMiFGEueWztz+d4+M3rGlmKPT+T4IS/jP4ylw3Nwpu6cpTTP8R1MAC1kF4VbdLt3ARf209w==",
+      "dev": true,
+      "funding": [
+        {
+          "type": "opencollective",
+          "url": "https://opencollective.com/browserslist"
+        },
+        {
+          "type": "tidelift",
+          "url": "https://tidelift.com/funding/github/npm/browserslist"
+        },
+        {
+          "type": "github",
+          "url": "https://github.com/sponsors/ai"
+        }
+      ],
+      "license": "MIT",
+      "dependencies": {
+        "escalade": "^3.2.0",
+        "picocolors": "^1.1.1"
+      },
+      "bin": {
+        "update-browserslist-db": "cli.js"
+      },
+      "peerDependencies": {
+        "browserslist": ">= 4.21.0"
+      }
+    },
+    "node_modules/utrie": {
+      "version": "1.0.2",
+      "resolved": "https://registry.npmjs.org/utrie/-/utrie-1.0.2.tgz",
+      "integrity": "sha512-1MLa5ouZiOmQzUbjbu9VmjLzn1QLXBhwpUa7kdLUQK+KQ5KA9I1vk5U4YHe/X2Ch7PYnJfWuWT+VbuxbGwljhw==",
+      "license": "MIT",
+      "optional": true,
+      "dependencies": {
+        "base64-arraybuffer": "^1.0.2"
+      }
+    },
+    "node_modules/victory-vendor": {
+      "version": "36.9.2",
+      "resolved": "https://registry.npmjs.org/victory-vendor/-/victory-vendor-36.9.2.tgz",
+      "integrity": "sha512-PnpQQMuxlwYdocC8fIJqVXvkeViHYzotI+NJrCuav0ZYFoq912ZHBk3mCeuj+5/VpodOjPe1z0Fk2ihgzlXqjQ==",
+      "license": "MIT AND ISC",
+      "dependencies": {
+        "@types/d3-array": "^3.0.3",
+        "@types/d3-ease": "^3.0.0",
+        "@types/d3-interpolate": "^3.0.1",
+        "@types/d3-scale": "^4.0.2",
+        "@types/d3-shape": "^3.1.0",
+        "@types/d3-time": "^3.0.0",
+        "@types/d3-timer": "^3.0.0",
+        "d3-array": "^3.1.6",
+        "d3-ease": "^3.0.1",
+        "d3-interpolate": "^3.0.1",
+        "d3-scale": "^4.0.2",
+        "d3-shape": "^3.1.0",
+        "d3-time": "^3.0.0",
+        "d3-timer": "^3.0.1"
+      }
+    },
+    "node_modules/vite": {
+      "version": "5.4.21",
+      "resolved": "https://registry.npmjs.org/vite/-/vite-5.4.21.tgz",
+      "integrity": "sha512-o5a9xKjbtuhY6Bi5S3+HvbRERmouabWbyUcpXXUA1u+GNUKoROi9byOJ8M0nHbHYHkYICiMlqxkg1KkYmm25Sw==",
+      "dev": true,
+      "license": "MIT",
+      "dependencies": {
+        "esbuild": "^0.21.3",
+        "postcss": "^8.4.43",
+        "rollup": "^4.20.0"
+      },
+      "bin": {
+        "vite": "bin/vite.js"
+      },
+      "engines": {
+        "node": "^18.0.0 || >=20.0.0"
+      },
+      "funding": {
+        "url": "https://github.com/vitejs/vite?sponsor=1"
+      },
+      "optionalDependencies": {
+        "fsevents": "~2.3.3"
+      },
+      "peerDependencies": {
+        "@types/node": "^18.0.0 || >=20.0.0",
+        "less": "*",
+        "lightningcss": "^1.21.0",
+        "sass": "*",
+        "sass-embedded": "*",
+        "stylus": "*",
+        "sugarss": "*",
+        "terser": "^5.4.0"
+      },
+      "peerDependenciesMeta": {
+        "@types/node": {
+          "optional": true
+        },
+        "less": {
+          "optional": true
+        },
+        "lightningcss": {
+          "optional": true
+        },
+        "sass": {
+          "optional": true
+        },
+        "sass-embedded": {
+          "optional": true
+        },
+        "stylus": {
+          "optional": true
+        },
+        "sugarss": {
+          "optional": true
+        },
+        "terser": {
+          "optional": true
+        }
+      }
+    },
+    "node_modules/void-elements": {
+      "version": "3.1.0",
+      "resolved": "https://registry.npmjs.org/void-elements/-/void-elements-3.1.0.tgz",
+      "integrity": "sha512-Dhxzh5HZuiHQhbvTW9AMetFfBHDMYpo23Uo9btPXgdYP+3T5S+p+jgNy7spra+veYhBP2dCSgxR/i2Y02h5/6w==",
+      "license": "MIT",
+      "engines": {
+        "node": ">=0.10.0"
+      }
+    },
+    "node_modules/wmf": {
+      "version": "1.0.2",
+      "resolved": "https://registry.npmjs.org/wmf/-/wmf-1.0.2.tgz",
+      "integrity": "sha512-/p9K7bEh0Dj6WbXg4JG0xvLQmIadrner1bi45VMJTfnbVHsc7yIajZyoSoK60/dtVBs12Fm6WkUI5/3WAVsNMw==",
+      "license": "Apache-2.0",
+      "engines": {
+        "node": ">=0.8"
+      }
+    },
+    "node_modules/word": {
+      "version": "0.3.0",
+      "resolved": "https://registry.npmjs.org/word/-/word-0.3.0.tgz",
+      "integrity": "sha512-OELeY0Q61OXpdUfTp+oweA/vtLVg5VDOXh+3he3PNzLGG/y0oylSOC1xRVj0+l4vQ3tj/bB1HVHv1ocXkQceFA==",
+      "license": "Apache-2.0",
+      "engines": {
+        "node": ">=0.8"
+      }
+    },
+    "node_modules/xlsx": {
+      "version": "0.18.5",
+      "resolved": "https://registry.npmjs.org/xlsx/-/xlsx-0.18.5.tgz",
+      "integrity": "sha512-dmg3LCjBPHZnQp5/F/+nnTa+miPJxUXB6vtk42YjBBKayDNagxGEeIdWApkYPOf3Z3pm3k62Knjzp7lMeTEtFQ==",
+      "license": "Apache-2.0",
+      "dependencies": {
+        "adler-32": "~1.3.0",
+        "cfb": "~1.2.1",
+        "codepage": "~1.15.0",
+        "crc-32": "~1.2.1",
+        "ssf": "~0.11.2",
+        "wmf": "~1.0.1",
+        "word": "~0.3.0"
+      },
+      "bin": {
+        "xlsx": "bin/xlsx.njs"
+      },
+      "engines": {
+        "node": ">=0.8"
+      }
+    },
+    "node_modules/yallist": {
+      "version": "3.1.1",
+      "resolved": "https://registry.npmjs.org/yallist/-/yallist-3.1.1.tgz",
+      "integrity": "sha512-a4UGQaWPH59mOXUYnAG2ewncQS4i4F43Tv3JoAM+s2VDAmS9NsK8GpDMLrCHPksFT7h3K6TOoUNn2pb7RoXx4g==",
+      "dev": true,
+      "license": "ISC"
+    }
   }
-
-  const del = async (id) => {
-    if (!confirm('Obrisati alat?')) return
-    try { await api.delete(`/tools/${id}`); setTools(tools.filter(t=>t.id!==id)); showToast('Alat obrisan'); load() }
-    catch { showToast('Greška', 'error') }
-  }
-
-  const saveQty = async (change, note) => {
-    try {
-      const r = await api.patch(`/tools/${qtyModal.id}/quantity`, { change, note })
-      setTools(tools.map(t => t.id===qtyModal.id ? r.data : t))
-      if (detailTool?.id === qtyModal.id) setDetailTool(r.data)
-      showToast('✓ Količina ažurirana')
-    } catch { showToast('Greška', 'error') }
-  }
-
-  const saveCalibration = async (calibForm) => {
-    try {
-      await api.post(`/tools/${calibModal.id}/calibration`, calibForm)
-      showToast('✓ Kalibracija evidentirana')
-      load()
-    } catch { showToast('Greška', 'error') }
-  }
-
-  const saveUsage = async (usageForm) => {
-    try {
-      await api.post(`/tools/${usageModal.id}/usage`, usageForm)
-      showToast('✓ Korištenje evidentirano')
-    } catch { showToast('Greška', 'error') }
-  }
-
-  const quickOrder = (tool) => {
-    setOrderForm({ tool_id:tool.id, quantity:tool.min_order_quantity||1, supplier:tool.supplier||'', notes:'', expected_date:'', send_email:false })
-    setOrderModal(true)
-    setTab('orders')
-  }
-
-  const saveOrder = async () => {
-    if (!orderForm.tool_id || !orderForm.quantity) { showToast('Odaberi alat i količinu', 'error'); return }
-    setOrderSaving(true)
-    try {
-      await api.post('/tools/orders', orderForm)
-      showToast('✓ Narudžba kreirana')
-      setOrderModal(false); loadOrders()
-    } catch(e) { showToast(e.response?.data?.error||'Greška', 'error') }
-    finally { setOrderSaving(false) }
-  }
-
-  const updateOrderStatus = async (id, status) => {
-    try {
-      await api.patch(`/tools/orders/${id}`, { status })
-      setOrders(orders.map(o => o.id===id ? {...o, status} : o))
-      if (status === 'received') { showToast('✓ Primljeno — zalihe ažurirane'); load() }
-      else showToast('✓ Status ažuriran')
-    } catch { showToast('Greška', 'error') }
-  }
-
-  // ── Computed ───────────────────────────────────────────────────────────────
-  const filtered = tools.filter(t => {
-    if (advFilters.qtyMin && t.current_quantity < parseInt(advFilters.qtyMin)) return false
-    if (advFilters.qtyMax && t.current_quantity > parseInt(advFilters.qtyMax)) return false
-    if (advFilters.location && !t.storage_location?.toLowerCase().includes(advFilters.location.toLowerCase())) return false
-    if (advFilters.supplier && !t.supplier?.toLowerCase().includes(advFilters.supplier.toLowerCase())) return false
-    return true
-  })
-
-  const totalValue = tools.reduce((s,t) => s + parseFloat(t.unit_price||0)*t.current_quantity, 0)
-  const calibDueCount = tools.filter(t => t.requires_calibration && (!t.next_calibration_date || new Date(t.next_calibration_date) <= new Date(Date.now() + 7*86400000))).length
-  const openOrdersCount = orders.filter(o => o.status==='pending'||o.status==='ordered').length
-
-  return (
-    <div style={{ position:'relative' }}>
-
-      {/* ── STATS ───────────────────────────────────────────────────────────── */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(6,1fr)', gap:10, marginBottom:20 }}>
-        <StatCard label="Ukupno alata" value={stats.total} color="yellow"/>
-        <StatCard label="Dostupni" value={stats.available} sub={Math.round((stats.available/Math.max(stats.total,1))*100)+'%'} color="green"/>
-        <StatCard label="Niske zalihe" value={stats.low} color="orange"/>
-        <StatCard label="Kritično" value={stats.critical} sub="Naruči odmah" color="red" onClick={()=>setStatF('Kritično')}/>
-        <StatCard label="Vrijednost zaliha" value={totalValue>0?totalValue.toFixed(0)+'€':'—'} color="teal"/>
-        <StatCard label="Narudžbe/Kalib." value={(parseInt(stats.open_orders)||0)+'/'+(parseInt(stats.calib_due)||0)} sub="otvoreno/uskoro" color="blue"/>
-      </div>
-
-      {/* ── TABS ────────────────────────────────────────────────────────────── */}
-      <TabBar
-        tabs={[
-          { key:'tools', label:'Alati', icon:'⚙' },
-          { key:'orders', label:'Narudžbe', icon:'📦', badge: parseInt(stats.open_orders)||0 },
-          { key:'calibration', label:'Kalibracija', icon:'📋', badge: parseInt(stats.calib_due)||0 },
-          { key:'stats', label:'Analitika', icon:'📊' },
-        ]}
-        active={tab}
-        onSelect={setTab}
-      />
-
-      {/* ══════════════════════════════════════════════════════════════════════
-          TOOLS TAB
-      ══════════════════════════════════════════════════════════════════════ */}
-      {tab === 'tools' && (
-        <>
-          {/* Toolbar */}
-          <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:14, flexWrap:'wrap' }}>
-            <SearchBar value={search} onChange={e=>setSearch(e.target.value)} placeholder="Naziv, ID alata..."/>
-            <FSel value={catF} onChange={e=>setCatF(e.target.value)}>
-              <option value="">Sve kategorije</option>
-              {CATS.map(c=><option key={c}>{c}</option>)}
-            </FSel>
-            <FSel value={statF} onChange={e=>setStatF(e.target.value)}>
-              <option value="">Svi statusi</option>
-              <option>Dostupan</option><option>Niske zalihe</option><option>Kritično</option>
-            </FSel>
-            <AdvancedFilter
-              fields={[
-                { key:'qtyMin', type:'number', label:'Količina min.', placeholder:'0' },
-                { key:'qtyMax', type:'number', label:'Količina maks.', placeholder:'999' },
-                { key:'location', type:'text', label:'Lokacija', placeholder:'npr. A3' },
-                { key:'supplier', type:'text', label:'Dobavljač', placeholder:'Sandvik...' },
-              ]}
-              values={advFilters}
-              onChange={setAdvFilters}
-              onReset={()=>setAdvFilters(EMPTY_FILTER)}
-            />
-            <div style={{ marginLeft:'auto', display:'flex', gap:6, alignItems:'center', flexWrap:'wrap' }}>
-              <ExcelBar
-                onExport={async () => tools.map(tool => mapToolToExcel(tool, i18n.language))}
-                onImport={async () => showToast('Import uskoro', 'info')}
-                templateHeaders={['ID','Naziv','Kategorija','Namjena','Dimenzije','Spoj','Lokacija','Kol.','Min.Kol.','Min.Narudžba','Jedinica','Cijena','Dobavljač','Kontakt','Strojevi','Kalibracija','Napomena']}
-                templateName="tools" exportFilename="deer_tools" showToast={showToast}
-              />
-              <Btn v="secondary" onClick={()=>exportToolsPDF(filtered, stats)} style={{ fontSize:11 }}>📄 PDF</Btn>
-              {stats.critical > 0 && <Btn v="secondary" onClick={()=>setAlertModal(true)} style={{ fontSize:11, color:'#F87171', borderColor:'#F8717166' }}>📧 Alert</Btn>}
-              {canEdit && <Btn onClick={openAdd}>+ Dodaj alat</Btn>}
-            </div>
-          </div>
-
-          {/* Critical alert */}
-          {stats.critical > 0 && (
-            <div style={{ background:'#F8717112', border:'1px solid #F8717144', borderRadius:10, padding:'10px 16px', marginBottom:12, display:'flex', alignItems:'center', gap:12 }}>
-              <span>🚨</span>
-              <span style={{ fontSize:12, color:'#F87171', fontWeight:600 }}>{stats.critical} alata ispod minimalne zalihe!</span>
-              <Btn v="secondary" onClick={()=>setAlertModal(true)} style={{ marginLeft:'auto', fontSize:10, padding:'4px 12px', color:'#F87171' }}>📧 Pošalji alert</Btn>
-              {statF!=='Kritično' ? <Btn v="secondary" onClick={()=>setStatF('Kritično')} style={{ fontSize:10, padding:'4px 12px' }}>Prikaži kritične</Btn>
-                : <Btn v="secondary" onClick={()=>setStatF('')} style={{ fontSize:10, padding:'4px 12px' }}>Prikaži sve</Btn>}
-            </div>
-          )}
-
-          {/* Table */}
-          {loading ? <Loading/> : !filtered.length ? <EmptyState icon="⚙" text="Nema alata. Dodaj prvi alat."/> : (
-            <TblWrap headers={['Naziv alata','Kat.','Namjena','Dimenzije','Lokacija','Zalihe','Dobavljač','Cijena','Status','Kalibracija','Rok','']}>
-              {filtered.map(tool => (
-                <TR key={tool.id} onClick={()=>setDetailTool(tool)} style={{ cursor:'pointer' }}>
-                  <TD>
-                    <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                      {tool.photo_url
-                        ? <img src={tool.photo_url} style={{ width:32, height:32, borderRadius:6, objectFit:'cover', flexShrink:0 }}/>
-                        : <div style={{ width:32, height:32, borderRadius:8, background:(CAT_COLOR[tool.category]||'#51FFFF')+'18', border:'1px solid '+(CAT_COLOR[tool.category]||'#51FFFF')+'44', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, flexShrink:0, color:CAT_COLOR[tool.category]||'#51FFFF' }}>{CAT_ICON[tool.category]||'⚙'}</div>}
-                      <div>
-                        <div style={{ fontWeight:600, color:'#e8f0ee', fontSize:13 }}>{tool.name}</div>
-                        <div style={{ fontSize:10, color:'#5A8480', fontFamily:'monospace' }}>{tool.internal_id}</div>
-                      </div>
-                    </div>
-                  </TD>
-                  <TD><Badge type="teal">{tool.category}</Badge></TD>
-                  <TD muted>{tool.purpose}</TD>
-                  <TD mono muted>{tool.dimensions}</TD>
-                  <TD mono>{tool.storage_location}</TD>
-                  <TD><QtyBar current={tool.current_quantity} min={tool.min_quantity}/>{tool.unit&&<span style={{ fontSize:9, color:'#5A8480', display:'block', marginTop:1 }}>{tool.unit}</span>}</TD>
-                  <TD muted style={{ fontSize:11 }}>{tool.supplier||'—'}</TD>
-                  <TD mono muted style={{ fontSize:11 }}>{tool.unit_price ? parseFloat(tool.unit_price).toFixed(2)+'€' : '—'}</TD>
-                  <TD>
-                    <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
-                      <StatusBadge status={tool.status}/>
-                      {tool.status==='Kritično' && canEdit && (
-                        <button onClick={e=>{e.stopPropagation();quickOrder(tool)}} style={{ background:'#FB923C22', color:'#FB923C', border:'1px solid #FB923C44', borderRadius:4, padding:'2px 6px', fontSize:9, cursor:'pointer', fontWeight:600 }}>📦 Naruči</button>
-                      )}
-                    </div>
-                  </TD>
-                  <TD>
-                    {tool.requires_calibration ? (
-                      <span style={{ fontSize:10, color:calibColor(tool.next_calibration_date), fontWeight:600 }}>
-                        {calibDays(tool.next_calibration_date)}
-                      </span>
-                    ) : <span style={{ fontSize:10, color:'#3B5450' }}>—</span>}
-                  </TD>
-                  <TD style={{ fontFamily:'monospace', fontSize:11, color:rokColor(tool.projected_lifespan_days) }}>{tool.projected_lifespan_days||'—'}</TD>
-                  <TD onClick={e=>e.stopPropagation()}>
-                    <div style={{ display:'flex', gap:4 }}>
-                      <button onClick={e=>{e.stopPropagation();setQrModal(tool)}} title="QR naljepnica" style={{ background:'transparent', border:'none', color:'#5A8480', cursor:'pointer', fontSize:13, padding:'2px' }}>▦</button>
-                      <RowActions onQty={()=>setQtyModal(tool)} onHistory={()=>openHistory(tool)} onEdit={()=>openEdit(tool)} onDelete={()=>del(tool.id)} canEdit={canEdit}/>
-                    </div>
-                  </TD>
-                </TR>
-              ))}
-            </TblWrap>
-          )}
-        </>
-      )}
-
-      {/* ══════════════════════════════════════════════════════════════════════
-          ORDERS TAB
-      ══════════════════════════════════════════════════════════════════════ */}
-      {tab === 'orders' && (
-        <>
-          <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14 }}>
-            <div style={{ flex:1, fontSize:12, color:'#7AA8A4' }}>Upravljanje narudžbama — kreiranje, praćenje, primanje (automatski ažurira zalihe)</div>
-            {canEdit && <Btn onClick={()=>{setOrderForm({tool_id:'',quantity:1,supplier:'',notes:'',expected_date:'',send_email:false});setOrderModal(true)}}>+ Nova narudžba</Btn>}
-          </div>
-
-          {ordersLoading ? <Loading/> : !orders.length ? (
-            <EmptyState icon="📦" text="Nema narudžbi. Kreiraj prvu narudžbu za kritične alate."/>
-          ) : (
-            <TblWrap headers={['Alat','Količina','Dobavljač','Status','Naručeno','Isporuka','Kreirao','Napomena','']}>
-              {orders.map(o => (
-                <TR key={o.id}>
-                  <TD>
-                    <div style={{ fontWeight:600, fontSize:12, color:'#e8f0ee' }}>{o.tool_name}</div>
-                    <div style={{ fontSize:10, color:'#5A8480', fontFamily:'monospace' }}>{o.tool_internal_id}</div>
-                  </TD>
-                  <TD><span style={{ fontFamily:'monospace', color:'#F5BC54', fontWeight:700 }}>{o.quantity}</span> <span style={{ fontSize:10, color:'#5A8480' }}>{o.unit||'kom'}</span></TD>
-                  <TD muted style={{ fontSize:11 }}>{o.supplier||'—'}</TD>
-                  <TD><OrderStatusBadge status={o.status}/></TD>
-                  <TD mono muted style={{ fontSize:11 }}>{o.created_at ? new Date(o.created_at).toLocaleDateString('hr') : '—'}</TD>
-                  <TD mono style={{ fontSize:11, color: o.expected_date && new Date(o.expected_date) < new Date() && o.status!=='received' ? '#F87171' : '#5A8480' }}>{o.expected_date ? new Date(o.expected_date).toLocaleDateString('hr') : '—'}</TD>
-                  <TD muted style={{ fontSize:10 }}>{o.created_by_name||'—'}</TD>
-                  <TD muted style={{ fontSize:11 }}>{o.notes||'—'}</TD>
-                  <TD>
-                    {canEdit && o.status!=='received' && o.status!=='cancelled' && (
-                      <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
-                        {o.status==='pending' && <button onClick={()=>updateOrderStatus(o.id,'ordered')} style={{ background:'#60A5FA22', color:'#60A5FA', border:'1px solid #60A5FA44', borderRadius:4, padding:'3px 8px', fontSize:10, cursor:'pointer' }}>Naručeno</button>}
-                        {o.status==='ordered' && <button onClick={()=>updateOrderStatus(o.id,'received')} style={{ background:'#4ADE8022', color:'#4ADE80', border:'1px solid #4ADE8044', borderRadius:4, padding:'3px 8px', fontSize:10, cursor:'pointer', fontWeight:700 }}>✓ Primljeno</button>}
-                        <button onClick={()=>updateOrderStatus(o.id,'cancelled')} style={{ background:'#F8717115', color:'#F87171', border:'1px solid #F8717133', borderRadius:4, padding:'3px 8px', fontSize:10, cursor:'pointer' }}>✕</button>
-                      </div>
-                    )}
-                    {o.status==='received' && <span style={{ fontSize:10, color:'#4ADE80' }}>✓ Zalihe ažurirane</span>}
-                  </TD>
-                </TR>
-              ))}
-            </TblWrap>
-          )}
-        </>
-      )}
-
-      {/* ══════════════════════════════════════════════════════════════════════
-          CALIBRATION TAB
-      ══════════════════════════════════════════════════════════════════════ */}
-      {tab === 'calibration' && (
-        <>
-          <div style={{ fontSize:12, color:'#7AA8A4', marginBottom:14 }}>Pregled kalibracije mjernih instrumenata i preciznih alata — s automatskim podsjetnikom i evidencijom certifikata.</div>
-          {tools.filter(t=>t.requires_calibration).length === 0 ? (
-            <EmptyState icon="📋" text="Nema alata s omogućenom kalibracijom. Uredi alat i označi 'Zahtijeva kalibraciju'."/>
-          ) : (
-            <div style={{ display:'grid', gap:8 }}>
-              {tools.filter(t=>t.requires_calibration).sort((a,b)=>(a.next_calibration_date||'9999')>(b.next_calibration_date||'9999')?1:-1).map(t => {
-                const color = calibColor(t.next_calibration_date)
-                const daysText = calibDays(t.next_calibration_date)
-                const isUrgent = !t.next_calibration_date || new Date(t.next_calibration_date) <= new Date(Date.now() + 7*86400000)
-                return (
-                  <div key={t.id} style={{ background:'#2B3C3A', border:`1px solid ${isUrgent?color+'55':'#4A6B6844'}`, borderRadius:10, padding:'14px 18px', display:'flex', alignItems:'center', gap:14 }}>
-                    <div style={{ width:44, height:44, borderRadius:10, background:'#324543', border:`2px solid ${color}44`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, flexShrink:0, color }}>{CAT_ICON[t.category]||'⚙'}</div>
-                    <div style={{ flex:1 }}>
-                      <div style={{ fontWeight:600, color:'#e8f0ee', fontSize:13 }}>{t.name} <span style={{ fontFamily:'monospace', fontSize:10, color:'#5A8480' }}>{t.internal_id}</span></div>
-                      <div style={{ fontSize:11, color:'#5A8480', marginTop:2 }}>
-                        {t.storage_location&&`${t.storage_location} · `}
-                        Zadnja: {t.last_calibration_date ? new Date(t.last_calibration_date).toLocaleDateString('hr') : 'Nikad'}
-                        {t.calibration_interval_days&&` · Interval: ${t.calibration_interval_days} dana`}
-                      </div>
-                    </div>
-                    <div style={{ textAlign:'right', flexShrink:0 }}>
-                      <div style={{ fontWeight:700, color, fontSize:14 }}>{daysText}</div>
-                      {t.next_calibration_date && <div style={{ fontSize:10, color:'#5A8480' }}>{new Date(t.next_calibration_date).toLocaleDateString('hr')}</div>}
-                    </div>
-                    {canEdit && <button onClick={()=>setCalibModal(t)} style={{ background:color+'22', color, border:`1px solid ${color}55`, borderRadius:8, padding:'8px 14px', fontSize:11, cursor:'pointer', fontWeight:700, flexShrink:0 }}>📋 Evidentiraj</button>}
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </>
-      )}
-
-      {/* ══════════════════════════════════════════════════════════════════════
-          STATS TAB
-      ══════════════════════════════════════════════════════════════════════ */}
-      {tab === 'stats' && (
-        <div>
-          <div style={{ display:'flex', gap:8, marginBottom:16, justifyContent:'flex-end' }}>
-            <Btn v="secondary" onClick={()=>exportToolsPDF(tools, stats)} style={{ fontSize:11 }}>📄 Izvezi PDF izvještaj</Btn>
-          </div>
-          <SectionTitle>Alati po kategorijama</SectionTitle>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10, marginBottom:22 }}>
-            {CATS.map(cat => {
-              const catTools = tools.filter(t=>t.category===cat)
-              if (!catTools.length) return null
-              const catVal = catTools.reduce((s,t)=>s+parseFloat(t.unit_price||0)*t.current_quantity, 0)
-              const crit = catTools.filter(t=>t.status==='Kritično').length
-              const color = CAT_COLOR[cat]||'#51FFFF'
-              return (
-                <div key={cat} style={{ background:'#2B3C3A', border:'1px solid #4A6B68', borderRadius:12, padding:'14px 16px', borderTop:'3px solid '+color }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
-                    <span style={{ fontSize:18, color }}>{CAT_ICON[cat]||'⚙'}</span>
-                    <span style={{ fontSize:11, fontWeight:700, color:'#C8DDD9', fontFamily:"'Chakra Petch',sans-serif" }}>{cat}</span>
-                  </div>
-                  <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, color:'#7AA8A4' }}>
-                    <span>Vrsta: <b style={{ color:'#C8DDD9' }}>{catTools.length}</b></span>
-                    {crit > 0 && <span style={{ color:'#F87171' }}>⚠ {crit} kritično</span>}
-                  </div>
-                  {catVal > 0 && <div style={{ fontSize:11, color:'#F5BC54', marginTop:4 }}>Vrijednost: {catVal.toFixed(0)}€</div>}
-                </div>
-              )
-            }).filter(Boolean)}
-          </div>
-
-          <SectionTitle>Alati koji trebaju narudžbu</SectionTitle>
-          {tools.filter(t=>t.status!=='Dostupan').length === 0 ? (
-            <div style={{ textAlign:'center', padding:'24px', color:'#4ADE80', fontSize:13 }}>✓ Sve zalihe su uredne</div>
-          ) : (
-            <div style={{ display:'grid', gap:7 }}>
-              {tools.filter(t=>t.status!=='Dostupan').map(t => (
-                <div key={t.id} style={{ background:'#2B3C3A', border:`1px solid ${t.status==='Kritično'?'#F8717155':'#FB923C44'}`, borderRadius:10, padding:'11px 16px', display:'flex', alignItems:'center', gap:12 }}>
-                  <div style={{ fontSize:18, color:t.status==='Kritično'?'#F87171':'#FB923C' }}>{CAT_ICON[t.category]||'⚙'}</div>
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontWeight:600, fontSize:12, color:'#e8f0ee' }}>{t.name}</div>
-                    <div style={{ fontSize:11, color:'#5A8480' }}>{t.storage_location} · Kol: {t.current_quantity}/{t.min_quantity} {t.unit||'kom'} · {t.supplier||'Bez dobavljača'}</div>
-                  </div>
-                  <StatusBadge status={t.status}/>
-                  {canEdit && <button onClick={()=>quickOrder(t)} style={{ background:'#F5BC54', color:'#1a2a28', border:'none', borderRadius:6, padding:'6px 14px', fontSize:11, fontWeight:700, cursor:'pointer', flexShrink:0 }}>📦 Naruči</button>}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {(() => {
-            const suppliers = [...new Set(tools.map(t=>t.supplier).filter(Boolean))]
-            if (!suppliers.length) return null
-            return (
-              <div style={{ marginTop:22 }}>
-                <SectionTitle>Dobavljači ({suppliers.length})</SectionTitle>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:10 }}>
-                  {suppliers.map(sup => {
-                    const supTools = tools.filter(t=>t.supplier===sup)
-                    const supVal = supTools.reduce((s,t)=>s+parseFloat(t.unit_price||0)*t.current_quantity, 0)
-                    const crit = supTools.filter(t=>t.status==='Kritično').length
-                    return (
-                      <div key={sup} style={{ background:'#2B3C3A', border:`1px solid ${crit>0?'#F8717133':'#4A6B68'}`, borderRadius:10, padding:'12px 16px' }}>
-                        <div style={{ fontWeight:700, fontSize:13, color:'#C8DDD9', marginBottom:4 }}>{sup}</div>
-                        <div style={{ fontSize:11, color:'#7AA8A4' }}>{supTools.length} vrsta alata{supVal>0?' · '+supVal.toFixed(0)+'€':''}</div>
-                        {crit > 0 && <div style={{ fontSize:10, color:'#F87171', marginTop:4 }}>⚠ {crit} kritično</div>}
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )
-          })()}
-        </div>
-      )}
-
-      {/* ─── Tool Detail Drawer ───────────────────────────────────────────── */}
-      {detailTool && (
-        <ToolDetail
-          tool={detailTool}
-          onClose={()=>setDetailTool(null)}
-          onEdit={openEdit}
-          onQty={t=>{setQtyModal(t);setDetailTool(null)}}
-          onQR={t=>setQrModal(t)}
-          onCalib={t=>setCalibModal(t)}
-          onUsage={t=>setUsageModal(t)}
-          canEdit={canEdit}
-        />
-      )}
-
-      {/* ─── Add/Edit Modal ───────────────────────────────────────────────── */}
-      <Modal open={modal} onClose={()=>setModal(false)} title={editItem?'Uredi alat':'Dodaj alat'} width={700}>
-        {/* Photo upload */}
-        <div style={{ display:'flex', gap:20, marginBottom:16, alignItems:'flex-start' }}>
-          <PhotoUpload
-            currentUrl={form.photoUrl}
-            onUpload={url=>f('photoUrl',url)}
-            toolId={editItem?.id}
-          />
-          <div style={{ flex:1 }}>
-            <SectionTitle>Osnovni podaci</SectionTitle>
-            <FGrid>
-              <Field label="Naziv alata" req><Inp placeholder="Glodalo Ø12 4-rezno" value={form.name} onChange={e=>f('name',e.target.value)}/></Field>
-              <Field label="Interni ID"><Inp placeholder="ALT-001" value={form.internalId} onChange={e=>f('internalId',e.target.value)}/></Field>
-              <Field label="Kategorija" req>
-                <Sel value={form.category} onChange={e=>f('category',e.target.value)}>
-                  <option value="">Odaberi...</option>{CATS.map(c=><option key={c}>{c}</option>)}
-                </Sel>
-              </Field>
-              <Field label="Namjena">
-                <Sel value={form.purpose} onChange={e=>f('purpose',e.target.value)}>
-                  <option value="">Odaberi...</option>{PURS.map(p=><option key={p}>{p}</option>)}
-                </Sel>
-              </Field>
-            </FGrid>
-          </div>
-        </div>
-        <FGrid>
-          <Field label="Dimenzije" req><Inp placeholder="Ø12×75mm" value={form.dimensions} onChange={e=>f('dimensions',e.target.value)}/></Field>
-          <Field label="Spoj / prihvat"><Inp placeholder="HSK-A63" value={form.connectionType} onChange={e=>f('connectionType',e.target.value)}/></Field>
-        </FGrid>
-
-        <SectionTitle style={{ marginTop:14 }}>Zalihe i lokacija</SectionTitle>
-        <FGrid>
-          <Field label="Lokacija / Polica"><Inp placeholder="A3-R2" value={form.storageLocation} onChange={e=>f('storageLocation',e.target.value)}/></Field>
-          <Field label="Jedinica"><Sel value={form.unit} onChange={e=>f('unit',e.target.value)}>{UNITS.map(u=><option key={u}>{u}</option>)}</Sel></Field>
-          <Field label="Trenutna količina" req><Inp type="number" min="0" value={form.currentQuantity} onChange={e=>f('currentQuantity',parseInt(e.target.value)||0)}/></Field>
-          <Field label="Minimalna količina" req><Inp type="number" min="1" value={form.minQuantity} onChange={e=>f('minQuantity',parseInt(e.target.value)||1)}/></Field>
-          <Field label="Min. kol. narudžbe"><Inp type="number" min="1" value={form.minOrderQuantity} onChange={e=>f('minOrderQuantity',parseInt(e.target.value)||1)}/></Field>
-          <Field label="Projektirani rok (dana)"><Inp type="number" placeholder="90" value={form.projectedLifespanDays} onChange={e=>f('projectedLifespanDays',e.target.value)}/></Field>
-        </FGrid>
-
-        <SectionTitle style={{ marginTop:14 }}>Dobavljač i cijena</SectionTitle>
-        <FGrid>
-          <Field label="Dobavljač"><Inp placeholder="Sandvik, Iscar..." value={form.supplier} onChange={e=>f('supplier',e.target.value)}/></Field>
-          <Field label="Kontakt dobavljača"><Inp placeholder="email ili tel." value={form.supplierContact} onChange={e=>f('supplierContact',e.target.value)}/></Field>
-          <Field label="Cijena/kom (€)"><Inp type="number" step="0.01" placeholder="0.00" value={form.unitPrice} onChange={e=>f('unitPrice',e.target.value)}/></Field>
-        </FGrid>
-
-        <SectionTitle style={{ marginTop:14 }}>Kalibracija i servis</SectionTitle>
-        <div style={{ background:'#243330', borderRadius:8, padding:'12px 14px', marginBottom:8, border:'1px solid #4A6B6844' }}>
-          <label style={{ display:'flex', alignItems:'center', gap:10, cursor:'pointer' }}>
-            <input type="checkbox" checked={form.requiresCalibration} onChange={e=>f('requiresCalibration',e.target.checked)} style={{ width:16, height:16, accentColor:'#F5BC54' }}/>
-            <span style={{ color:'#C8DDD9', fontSize:12, fontWeight:600 }}>Alat zahtijeva kalibraciju (mjerila, instrumenti...)</span>
-          </label>
-          {form.requiresCalibration && (
-            <FGrid style={{ marginTop:12 }}>
-              <Field label="Interval kalibracije (dana)"><Inp type="number" placeholder="180" value={form.calibrationIntervalDays} onChange={e=>f('calibrationIntervalDays',e.target.value)}/></Field>
-              <Field label="Interval servisa (dana)"><Inp type="number" placeholder="365" value={form.serviceIntervalDays} onChange={e=>f('serviceIntervalDays',e.target.value)}/></Field>
-            </FGrid>
-          )}
-        </div>
-
-        <SectionTitle style={{ marginTop:14 }}>Primjena na alatnim mjestima</SectionTitle>
-        <Field label="Strojevi / operacije (odvojite zarezom)" full>
-          <Inp placeholder="CNC-001, CNC-002, Tokarilica A" value={form.machineApplicability} onChange={e=>f('machineApplicability',e.target.value)}/>
-        </Field>
-        <div style={{ marginTop:8 }}>
-          <Field label="Napomena" full><Inp placeholder="Opcijsko..." value={form.notes} onChange={e=>f('notes',e.target.value)}/></Field>
-        </div>
-        <div style={{ display:'flex', gap:10, justifyContent:'flex-end', marginTop:20 }}>
-          <Btn v="secondary" onClick={()=>setModal(false)}>Odustani</Btn>
-          <Btn onClick={save} disabled={saving}>{saving?'Sprema...':'Spremi'}</Btn>
-        </div>
-      </Modal>
-
-      {/* ─── Order Modal ──────────────────────────────────────────────────── */}
-      <Modal open={orderModal} onClose={()=>setOrderModal(false)} title="Nova narudžba alata" width={500}>
-        <Field label="Alat" req>
-          <Sel value={orderForm.tool_id} onChange={e=>{
-            const tool=tools.find(t=>t.id===e.target.value)
-            fo('tool_id',e.target.value)
-            if (tool) { fo('supplier',tool.supplier||''); fo('quantity',tool.min_order_quantity||1) }
-          }}>
-            <option value="">Odaberi alat...</option>
-            {tools.map(t=><option key={t.id} value={t.id}>{t.name} ({t.internal_id||t.id.slice(0,8)}) — {t.current_quantity}/{t.min_quantity}</option>)}
-          </Sel>
-        </Field>
-        <FGrid>
-          <Field label="Količina" req><Inp type="number" min="1" value={orderForm.quantity} onChange={e=>fo('quantity',parseInt(e.target.value)||1)}/></Field>
-          <Field label="Dobavljač"><Inp placeholder="Naziv / email dobavljača" value={orderForm.supplier} onChange={e=>fo('supplier',e.target.value)}/></Field>
-          <Field label="Očekivana isporuka"><Inp type="date" value={orderForm.expected_date} onChange={e=>fo('expected_date',e.target.value)}/></Field>
-        </FGrid>
-        <Field label="Napomena" full><Inp placeholder="Hitna narudžba, spec. zahtjevi..." value={orderForm.notes} onChange={e=>fo('notes',e.target.value)}/></Field>
-        <label style={{ display:'flex', alignItems:'center', gap:10, marginTop:12, cursor:'pointer' }}>
-          <input type="checkbox" checked={orderForm.send_email} onChange={e=>fo('send_email',e.target.checked)} style={{ width:15, height:15, accentColor:'#F5BC54' }}/>
-          <span style={{ color:'#C8DDD9', fontSize:12 }}>Automatski pošalji email dobavljaču (ako je Dobavljač = email adresa)</span>
-        </label>
-        <div style={{ display:'flex', gap:10, justifyContent:'flex-end', marginTop:20 }}>
-          <Btn v="secondary" onClick={()=>setOrderModal(false)}>Odustani</Btn>
-          <Btn onClick={saveOrder} disabled={orderSaving}>{orderSaving?'Sprema...':'📦 Kreiraj narudžbu'}</Btn>
-        </div>
-      </Modal>
-
-      {/* ─── Specialty modals ─────────────────────────────────────────────── */}
-      <QRModal open={!!qrModal} onClose={()=>setQrModal(null)} tool={qrModal}/>
-      <CalibrationModal open={!!calibModal} onClose={()=>setCalibModal(null)} tool={calibModal} onSave={saveCalibration}/>
-      <UsageModal open={!!usageModal} onClose={()=>setUsageModal(null)} tool={usageModal} onSave={saveUsage}/>
-      <AlertModal open={alertModal} onClose={()=>setAlertModal(false)} criticalCount={parseInt(stats.critical)||0}/>
-
-      <QtyAdjModal open={!!qtyModal} onClose={()=>setQtyModal(null)} item={qtyModal} onSave={saveQty}/>
-      <HistoryModal open={!!histModal} onClose={()=>setHistModal(null)} items={histItems} title={'Historija: '+(histModal?.name||'')}/>
-      <Toast {...toast}/>
-    </div>
-  )
 }

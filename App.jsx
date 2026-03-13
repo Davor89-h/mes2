@@ -5,161 +5,241 @@ const db = require('../db')
 
 router.use(auth)
 
-// GET OEE overview — latest for each machine
-router.get('/overview', (req, res) => {
-  try {
-    const machines = db.all('SELECT * FROM machines ORDER BY name')
-    const result = machines.map(m => {
-      const today = new Date().toISOString().split('T')[0]
-      const latest = db.get('SELECT * FROM oee_records WHERE machine_id=? ORDER BY record_date DESC LIMIT 1', [m.id])
-      const avg7 = db.get(`
-        SELECT AVG(availability) as avg_avail, AVG(performance) as avg_perf,
-               AVG(quality) as avg_qual, AVG(oee) as avg_oee,
-               SUM(parts_produced) as total_parts, SUM(parts_scrap) as total_scrap
-        FROM oee_records WHERE machine_id=? AND record_date >= date('now','-7 days')`, [m.id])
-      const wo_active = db.get(`SELECT COUNT(*) as c FROM work_orders WHERE machine_id=? AND status='in_progress'`, [m.id])
-      return {
-        machine_id: m.id, machine_name: m.name, machine_code: m.machine_id, status: m.status,
-        today: latest,
-        avg_7days: {
-          availability: Math.round((avg7?.avg_avail||0) * 100) / 100,
-          performance:  Math.round((avg7?.avg_perf||0)  * 100) / 100,
-          quality:      Math.round((avg7?.avg_qual||0)  * 100) / 100,
-          oee:          Math.round((avg7?.avg_oee||0)   * 100) / 100,
-          total_parts:  avg7?.total_parts || 0,
-          total_scrap:  avg7?.total_scrap || 0,
-        },
-        active_work_orders: wo_active?.c || 0
-      }
-    })
-    res.json(result)
-  } catch (e) { res.status(500).json({ error: e.message }) }
-})
+// ─── BUDŽET ────────────────────────────────────────────────────────────────
 
-// GET OEE history for machine
-router.get('/machine/:machine_id', (req, res) => {
+router.get('/budzet', (req, res) => {
   try {
-    const { days = 30 } = req.query
     const rows = db.all(`
-      SELECT * FROM oee_records WHERE machine_id=? AND record_date >= date('now','-${parseInt(days)||30} days')
-      ORDER BY record_date ASC`, [req.params.machine_id])
-    const machine = db.get('SELECT * FROM machines WHERE id=?', [req.params.machine_id])
-    res.json({ machine, records: rows })
-  } catch (e) { res.status(500).json({ error: e.message }) }
-})
-
-// GET daily fleet OEE (all machines aggregated)
-router.get('/fleet', (req, res) => {
-  try {
-    const { days = 14 } = req.query
-    const rows = db.all(`
-      SELECT record_date,
-        ROUND(AVG(availability)*100,1) as avg_availability,
-        ROUND(AVG(performance)*100,1)  as avg_performance,
-        ROUND(AVG(quality)*100,1)      as avg_quality,
-        ROUND(AVG(oee)*100,1)          as avg_oee,
-        SUM(parts_produced)            as total_parts,
-        SUM(parts_scrap)               as total_scrap,
-        COUNT(DISTINCT machine_id)     as machines_count
-      FROM oee_records
-      WHERE record_date >= date('now','-${parseInt(days)||14} days')
-      GROUP BY record_date ORDER BY record_date ASC`)
+      SELECT b.*, u.first_name || ' ' || u.last_name as kreirao_ime
+      FROM kontroling_budzet b
+      LEFT JOIN users u ON b.kreirao_id = u.id
+      ORDER BY b.godina DESC, b.mjesec DESC
+    `)
     res.json(rows)
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
-// POST manual OEE entry
-router.post('/', (req, res) => {
+router.post('/budzet', (req, res) => {
   try {
-    const { machine_id, record_date, shift, planned_time_min, downtime_min, downtime_reason,
-            parts_produced, parts_target, parts_good, parts_scrap } = req.body
-    if (!machine_id || !record_date) return res.status(400).json({ error: 'machine_id and record_date required' })
-
-    const planned = parseInt(planned_time_min) || 480
-    const downtime = parseInt(downtime_min) || 0
-    const prod = parseInt(parts_produced) || 0
-    const target = parseInt(parts_target) || prod || 1
-    const good = parseInt(parts_good) || prod
-    const scrap = parseInt(parts_scrap) || 0
-
-    const avail = Math.min(1, Math.max(0, (planned - downtime) / planned))
-    const perf  = Math.min(1, Math.max(0, prod / target))
-    const qual  = prod > 0 ? Math.min(1, Math.max(0, good / prod)) : 1
-    const oee   = Math.round(avail * perf * qual * 100) / 100
-
-    // Upsert
-    const existing = db.get('SELECT id FROM oee_records WHERE machine_id=? AND record_date=? AND shift=?', [machine_id, record_date, shift||'A'])
-    if (existing) {
-      db.prepare(`UPDATE oee_records SET planned_time_min=?,downtime_min=?,downtime_reason=?,parts_produced=?,parts_target=?,parts_good=?,parts_scrap=?,availability=?,performance=?,quality=?,oee=? WHERE id=?`)
-        .run(planned, downtime, downtime_reason||'', prod, target, good, scrap, avail, perf, qual, oee, existing.id)
-      return res.json(db.get('SELECT * FROM oee_records WHERE id=?', [existing.id]))
-    }
-    const r = db.prepare(`INSERT INTO oee_records (machine_id,record_date,shift,planned_time_min,downtime_min,downtime_reason,parts_produced,parts_target,parts_good,parts_scrap,availability,performance,quality,oee) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-      .run(machine_id, record_date, shift||'A', planned, downtime, downtime_reason||'', prod, target, good, scrap, avail, perf, qual, oee)
-    res.json(db.get('SELECT * FROM oee_records WHERE id=?', [r.lastInsertRowid]))
+    const { godina, mjesec, kategorija, opis, iznos_plan, napomena } = req.body
+    const result = db.prepare(`
+      INSERT INTO kontroling_budzet (godina, mjesec, kategorija, opis, iznos_plan, napomena, kreirao_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(godina, mjesec, kategorija, opis || '', iznos_plan, napomena || '', req.user.id)
+    res.json(db.get('SELECT * FROM kontroling_budzet WHERE id = ?', [result.lastInsertRowid]))
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
-// GET production costs overview
-router.get('/costs/overview', (req, res) => {
+router.put('/budzet/:id', (req, res) => {
   try {
-    const { days = 30 } = req.query
+    const { godina, mjesec, kategorija, opis, iznos_plan, iznos_stvarni, napomena } = req.body
+    db.prepare(`
+      UPDATE kontroling_budzet SET godina=?, mjesec=?, kategorija=?, opis=?, iznos_plan=?, iznos_stvarni=?, napomena=?, updated_at=datetime('now')
+      WHERE id=?
+    `).run(godina, mjesec, kategorija, opis || '', iznos_plan, iznos_stvarni || 0, napomena || '', req.params.id)
+    res.json(db.get('SELECT * FROM kontroling_budzet WHERE id = ?', [req.params.id]))
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+router.delete('/budzet/:id', (req, res) => {
+  try {
+    db.run('DELETE FROM kontroling_budzet WHERE id = ?', [req.params.id])
+    res.json({ ok: true })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+// ─── TROŠKOVI STROJA/SATA ──────────────────────────────────────────────────
+
+router.get('/strojni-troskovi', (req, res) => {
+  try {
     const rows = db.all(`
-      SELECT pc.cost_type, SUM(pc.total_cost) as total, COUNT(DISTINCT pc.work_order_id) as work_orders
-      FROM production_costs pc
-      JOIN work_orders w ON pc.work_order_id=w.id
-      WHERE w.created_at >= date('now','-${parseInt(days)||30} days')
-      GROUP BY pc.cost_type`)
-    const byWo = db.all(`
-      SELECT w.work_order_id, w.part_name, SUM(pc.total_cost) as total_cost
-      FROM production_costs pc
-      JOIN work_orders w ON pc.work_order_id=w.id
-      WHERE w.created_at >= date('now','-${parseInt(days)||30} days')
-      GROUP BY pc.work_order_id ORDER BY total_cost DESC LIMIT 10`)
-    res.json({ by_type: rows, top_by_wo: byWo })
+      SELECT ms.*, m.name as stroj_naziv
+      FROM kontroling_masinski_sat ms
+      LEFT JOIN machines m ON ms.machine_id = m.id
+      ORDER BY ms.vrijedi_od DESC
+    `)
+    res.json(rows)
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
-// POST calculate and store production costs for WO
-router.post('/costs/:work_order_id', (req, res) => {
+router.post('/strojni-troskovi', (req, res) => {
   try {
-    const wo = db.get('SELECT * FROM work_orders WHERE id=?', [req.params.work_order_id])
-    if (!wo) return res.status(404).json({ error: 'Work order not found' })
+    const { machine_id, trošak_amortizacija, trošak_struja, trošak_odrzavanje, trošak_ostalo, vrijedi_od, napomena } = req.body
+    const ukupno = (trošak_amortizacija || 0) + (trošak_struja || 0) + (trošak_odrzavanje || 0) + (trošak_ostalo || 0)
+    const result = db.prepare(`
+      INSERT INTO kontroling_masinski_sat (machine_id, trosak_amortizacija, trosak_struja, trosak_odrzavanje, trosak_ostalo, trosak_ukupno_sat, vrijedi_od, napomena, kreirao_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(machine_id, trošak_amortizacija || 0, trošak_struja || 0, trošak_odrzavanje || 0, trošak_ostalo || 0, ukupno, vrijedi_od, napomena || '', req.user.id)
+    res.json(db.get('SELECT * FROM kontroling_masinski_sat WHERE id = ?', [result.lastInsertRowid]))
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
 
-    const machineRatePerHour = 85  // €/h machine rate
-    const operatorRatePerHour = 28 // €/h operator rate
-    const materialCostPerKg = 8    // €/kg default
+router.put('/strojni-troskovi/:id', (req, res) => {
+  try {
+    const { machine_id, trošak_amortizacija, trošak_struja, trošak_odrzavanje, trošak_ostalo, vrijedi_od, napomena } = req.body
+    const ukupno = (trošak_amortizacija || 0) + (trošak_struja || 0) + (trošak_odrzavanje || 0) + (trošak_ostalo || 0)
+    db.prepare(`
+      UPDATE kontroling_masinski_sat SET machine_id=?, trosak_amortizacija=?, trosak_struja=?, trosak_odrzavanje=?, trosak_ostalo=?, trosak_ukupno_sat=?, vrijedi_od=?, napomena=?
+      WHERE id=?
+    `).run(machine_id, trošak_amortizacija || 0, trošak_struja || 0, trošak_odrzavanje || 0, trošak_ostalo || 0, ukupno, vrijedi_od, napomena || '', req.params.id)
+    res.json(db.get('SELECT * FROM kontroling_masinski_sat WHERE id = ?', [req.params.id]))
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
 
-    db.prepare('DELETE FROM production_costs WHERE work_order_id=?').run(wo.id)
-    const costs = []
+router.delete('/strojni-troskovi/:id', (req, res) => {
+  try {
+    db.run('DELETE FROM kontroling_masinski_sat WHERE id = ?', [req.params.id])
+    res.json({ ok: true })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
 
-    // Machine time cost
-    if (wo.actual_time_min > 0) {
-      const machCost = (wo.actual_time_min / 60) * machineRatePerHour
-      db.prepare(`INSERT INTO production_costs (work_order_id,cost_type,description,quantity,unit_cost,total_cost) VALUES (?,?,?,?,?,?)`)
-        .run(wo.id, 'machine', `Stroj — ${wo.actual_time_min} min`, wo.actual_time_min/60, machineRatePerHour, Math.round(machCost*100)/100)
-      costs.push({ type: 'machine', total: machCost })
-    }
-    // Setup time cost
-    if (wo.setup_time_min > 0) {
-      const setupCost = (wo.setup_time_min / 60) * operatorRatePerHour
-      db.prepare(`INSERT INTO production_costs (work_order_id,cost_type,description,quantity,unit_cost,total_cost) VALUES (?,?,?,?,?,?)`)
-        .run(wo.id, 'setup', `Priprema — ${wo.setup_time_min} min`, wo.setup_time_min/60, operatorRatePerHour, Math.round(setupCost*100)/100)
-      costs.push({ type: 'setup', total: setupCost })
-    }
-    // Tool wear cost (based on tool life consumed)
-    const toolLife = db.all(`SELECT tl.* FROM tool_life tl JOIN work_order_tools wot ON tl.tool_id=wot.tool_id WHERE wot.work_order_id=?`, [wo.id])
-    if (toolLife.length > 0) {
-      const toolCost = toolLife.length * 12 // simplified: €12 per tool used
-      db.prepare(`INSERT INTO production_costs (work_order_id,cost_type,description,quantity,unit_cost,total_cost) VALUES (?,?,?,?,?,?)`)
-        .run(wo.id, 'tools', `Habanje alata — ${toolLife.length} alata`, toolLife.length, 12, toolCost)
-      costs.push({ type: 'tools', total: toolCost })
-    }
+// ─── TROŠKOVI PO RADNOM NALOGU ────────────────────────────────────────────
 
-    const totalCost = costs.reduce((s, c) => s + c.total, 0)
-    const costPerPiece = wo.quantity_done > 0 ? totalCost / wo.quantity_done : 0
+router.get('/nalog-troskovi', (req, res) => {
+  try {
+    const { work_order_id } = req.query
+    let sql = `
+      SELECT nt.*, wo.work_order_id as nalog_broj, wo.part_name
+      FROM kontroling_nalog_troskovi nt
+      LEFT JOIN work_orders wo ON nt.work_order_id = wo.id
+    `
+    const params = []
+    if (work_order_id) { sql += ' WHERE nt.work_order_id = ?'; params.push(work_order_id) }
+    sql += ' ORDER BY nt.created_at DESC'
+    res.json(db.all(sql, params))
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
 
-    res.json({ work_order_id: wo.id, costs, total_cost: Math.round(totalCost*100)/100, cost_per_piece: Math.round(costPerPiece*100)/100 })
+router.post('/nalog-troskovi', (req, res) => {
+  try {
+    const { work_order_id, kategorija, opis, kolicina, jedinicna_cijena, napomena } = req.body
+    const ukupno = (kolicina || 1) * (jedinicna_cijena || 0)
+    const result = db.prepare(`
+      INSERT INTO kontroling_nalog_troskovi (work_order_id, kategorija, opis, kolicina, jedinicna_cijena, ukupno, napomena, kreirao_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(work_order_id, kategorija, opis || '', kolicina || 1, jedinicna_cijena || 0, ukupno, napomena || '', req.user.id)
+    res.json(db.get('SELECT * FROM kontroling_nalog_troskovi WHERE id = ?', [result.lastInsertRowid]))
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+router.put('/nalog-troskovi/:id', (req, res) => {
+  try {
+    const { work_order_id, kategorija, opis, kolicina, jedinicna_cijena, napomena } = req.body
+    const ukupno = (kolicina || 1) * (jedinicna_cijena || 0)
+    db.prepare(`
+      UPDATE kontroling_nalog_troskovi SET work_order_id=?, kategorija=?, opis=?, kolicina=?, jedinicna_cijena=?, ukupno=?, napomena=?
+      WHERE id=?
+    `).run(work_order_id, kategorija, opis || '', kolicina || 1, jedinicna_cijena || 0, ukupno, napomena || '', req.params.id)
+    res.json(db.get('SELECT * FROM kontroling_nalog_troskovi WHERE id = ?', [req.params.id]))
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+router.delete('/nalog-troskovi/:id', (req, res) => {
+  try {
+    db.run('DELETE FROM kontroling_nalog_troskovi WHERE id = ?', [req.params.id])
+    res.json({ ok: true })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+// ─── PROFITABILNOST ────────────────────────────────────────────────────────
+
+router.get('/profitabilnost', (req, res) => {
+  try {
+    const rows = db.all(`
+      SELECT p.*, sp.name as partner_naziv
+      FROM kontroling_profitabilnost p
+      LEFT JOIN sales_partners sp ON p.partner_id = sp.id
+      ORDER BY p.period_god DESC, p.period_mj DESC
+    `)
+    res.json(rows)
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+router.post('/profitabilnost', (req, res) => {
+  try {
+    const { partner_id, proizvod, period_god, period_mj, prihod, trošak_materijal, trošak_rad, trošak_rezija, napomena } = req.body
+    const ukupni_trošak = (trošak_materijal || 0) + (trošak_rad || 0) + (trošak_rezija || 0)
+    const bruto_dobit = (prihod || 0) - ukupni_trošak
+    const marza = prihod > 0 ? (bruto_dobit / prihod) * 100 : 0
+    const result = db.prepare(`
+      INSERT INTO kontroling_profitabilnost (partner_id, proizvod, period_god, period_mj, prihod, trosak_materijal, trosak_rad, trosak_rezija, ukupni_trosak, bruto_dobit, marza_posto, napomena, kreirao_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(partner_id || null, proizvod, period_god, period_mj, prihod || 0, trošak_materijal || 0, trošak_rad || 0, trošak_rezija || 0, ukupni_trošak, bruto_dobit, marza, napomena || '', req.user.id)
+    res.json(db.get('SELECT * FROM kontroling_profitabilnost WHERE id = ?', [result.lastInsertRowid]))
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+router.put('/profitabilnost/:id', (req, res) => {
+  try {
+    const { partner_id, proizvod, period_god, period_mj, prihod, trošak_materijal, trošak_rad, trošak_rezija, napomena } = req.body
+    const ukupni_trošak = (trošak_materijal || 0) + (trošak_rad || 0) + (trošak_rezija || 0)
+    const bruto_dobit = (prihod || 0) - ukupni_trošak
+    const marza = prihod > 0 ? (bruto_dobit / prihod) * 100 : 0
+    db.prepare(`
+      UPDATE kontroling_profitabilnost SET partner_id=?, proizvod=?, period_god=?, period_mj=?, prihod=?, trosak_materijal=?, trosak_rad=?, trosak_rezija=?, ukupni_trosak=?, bruto_dobit=?, marza_posto=?, napomena=?
+      WHERE id=?
+    `).run(partner_id || null, proizvod, period_god, period_mj, prihod || 0, trošak_materijal || 0, trošak_rad || 0, trošak_rezija || 0, ukupni_trošak, bruto_dobit, marza, napomena || '', req.params.id)
+    res.json(db.get('SELECT * FROM kontroling_profitabilnost WHERE id = ?', [req.params.id]))
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+router.delete('/profitabilnost/:id', (req, res) => {
+  try {
+    db.run('DELETE FROM kontroling_profitabilnost WHERE id = ?', [req.params.id])
+    res.json({ ok: true })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+// ─── SUMMARY / KPI ────────────────────────────────────────────────────────
+
+router.get('/summary', (req, res) => {
+  try {
+    const godina = req.query.godina || new Date().getFullYear()
+
+    const budzet = db.all(`SELECT kategorija, SUM(iznos_plan) as plan, SUM(iznos_stvarni) as stvarni FROM kontroling_budzet WHERE godina=? GROUP BY kategorija`, [godina])
+    const nalogTroskovi = db.all(`SELECT kategorija, SUM(ukupno) as ukupno FROM kontroling_nalog_troskovi GROUP BY kategorija`)
+    const profitabilnost = db.all(`SELECT SUM(prihod) as prihod, SUM(ukupni_trosak) as trosak, SUM(bruto_dobit) as dobit, AVG(marza_posto) as avg_marza FROM kontroling_profitabilnost WHERE period_god=?`, [godina])
+    const strojniSat = db.all(`SELECT m.name, ms.trosak_ukupno_sat FROM kontroling_masinski_sat ms LEFT JOIN machines m ON ms.machine_id = m.id ORDER BY ms.vrijedi_od DESC`)
+
+    // Budget variance
+    const totalPlan = budzet.reduce((s, r) => s + (r.plan || 0), 0)
+    const totalStvarni = budzet.reduce((s, r) => s + (r.stvarni || 0), 0)
+    const totalNalogTroskovi = nalogTroskovi.reduce((s, r) => s + (r.ukupno || 0), 0)
+
+    res.json({
+      budzet,
+      nalogTroskovi,
+      profitabilnost: profitabilnost[0] || {},
+      strojniSat,
+      kpi: {
+        totalPlan,
+        totalStvarni,
+        varijanca: totalPlan - totalStvarni,
+        varijancaPosto: totalPlan > 0 ? ((totalPlan - totalStvarni) / totalPlan) * 100 : 0,
+        totalNalogTroskovi,
+        prihod: profitabilnost[0]?.prihod || 0,
+        dobit: profitabilnost[0]?.dobit || 0,
+        avgMarza: profitabilnost[0]?.avg_marza || 0,
+      }
+    })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+// ─── TREND (monthly) ──────────────────────────────────────────────────────
+router.get('/trend', (req, res) => {
+  try {
+    const godina = req.query.godina || new Date().getFullYear()
+    const trend = db.all(`
+      SELECT period_mj as mj,
+             SUM(prihod) as prihod,
+             SUM(ukupni_trosak) as trosak,
+             SUM(bruto_dobit) as dobit
+      FROM kontroling_profitabilnost
+      WHERE period_god = ?
+      GROUP BY period_mj
+      ORDER BY period_mj
+    `, [godina])
+    res.json(trend)
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
